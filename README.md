@@ -1,79 +1,84 @@
 # 🎮 X-Charge (v1.0)
 
-**X-Charge** es un monitor flotante premium de batería y telemetría en tiempo real para Windows 10/11, optimizado para mandos **Xbox** y cualquier gamepad compatible con el estándar **XInput** en PC.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6.svg)](https://microsoft.com/windows)
+[![.NET](https://img.shields.io/badge/.NET-8.0%20WPF-512BD4.svg)](https://dotnet.microsoft.com/)
+
+**X-Charge** is a premium, lightweight floating battery monitor and real-time telemetry HUD for Windows 10 & 11, specifically designed for **Xbox controllers** and any **XInput-compatible gamepad** on PC.
+
+[English](README.md) • [Español](README.es.md)
 
 ---
 
-## ✨ Características Principales
+## ✨ Key Features
 
-- **Motor Nativo XInput (100% Seguro y Estable)**:
-  - Arquitectura puramente Win32 (`XInputGetState` y `XInputGetBatteryInformation`).
-  - **Cero interferencias de radiofrecuencia**: erradicado por completo el fallo de apagado del mando al reconectar con el receptor inalámbrico USB de Xbox.
-  - Detección inmediata de conexión y desconexión sin objetos zombi en memoria.
-  - Soporte de hasta 4 mandos en simultáneo con identificación independiente de ranuras.
-- **Detección de Estados y Alimentación Externa**:
-  - Distinción instantánea entre conexión por cable USB (`UsbCharged`) y batería inalámbrica (`Alcalina` / `NiMH` / `Pack de Carga`).
-  - Corrección completa del bug del 100%: nunca más desaparece el porcentaje ni se desborda la barra gráfica.
-  - Alertas visuales y sonoras de batería baja configurables (umbral del 10%, 15% o 20%).
-- **Modos de Visualización**:
-  - **Modo Normal**: Ventana elegante con telemetría detallada, nivel de carga, colorimetría según estado y barra de progreso.
-  - **Modo Compacto**: Indicador flotante circular minimalista con porcentaje en tiempo real, redimensionable mediante arrastre y posicionable libremente.
-  - **Regulador Interactivo de Opacidad (Rueda del Ratón)**: Al colocar el cursor sobre el modo compacto, girar la rueda hacia arriba lo vuelve 100% nítido y girar hacia abajo lo hace translúcido (hasta 15%), con un medidor visual HUD animado que guarda tu nivel preferido automáticamente.
-- **Protección contra Quemado OLED (Anti-Burn-In)**:
-  - **Órbita Circular Suave**: Desplazamiento periódico imperceptible en trayectoria armónica ($\Delta X = 8\cos\theta, \Delta Y = 8\sin\theta$) con aceleración suave que cuida paneles OLED sin alterar la opacidad elegida por el usuario.
-- **Bandeja del Sistema (System Tray)**:
-  - Icono dinámico pixel-art con nivel de carga e indicador de cable.
-  - Menú contextual completo: cambio de temas (Oscuro, Claro, Transparente), sonidos de conexión/desconexión USB, alertas de batería, auto-inicio con Windows y umbral de alerta.
-- **Multi-idioma**: 7 idiomas incluidos (Español, Inglés, Francés, Alemán, Portugués, Chino y Ruso).
-- **Resiliencia de Datos**:
-  - Configuración persistente en `%AppData%\X-Charge\config.json` con migración automática y tolerancia a fallos.
-- **Higiene de Recursos**:
-  - Desuscripción rigurosa de eventos estáticos del sistema (`UserPreferenceChanged`).
-  - Liberación limpia y segura de Mutex de instancia única.
-
----
-
-## 🎮 Compatibilidad de Mandos
-
-- **Mandos con Soporte Directo (Nativo XInput)**:
-  - **Xbox Oficiales**: Xbox Series X/S, Xbox One, Xbox Elite Series 1 y 2, Xbox 360 (mediante Receptor Inalámbrico USB oficial, cable USB o Bluetooth).
-  - **Mandos PC de Terceros**: 8BitDo (Ultimate, Pro 2, SN30 Pro en modo X), GameSir (G7, Nova, Kaleid), Logitech (F710, F310 con switch en "X"), Razer, PowerA, Gulikit (KingKong 2/3), Flydigi y cualquier gamepad genérico con selector en modo XInput.
-- **Mandos de PlayStation (DualSense / PS5, DualShock 4 / PS4) y Nintendo Switch**:
-  - Windows no mapea los mandos de PlayStation ni Switch a XInput nativamente (utilizan DirectInput/HID genérico).
-  - **Sin embargo, si el usuario utiliza herramientas como DS4Windows, Steam Input, DualSenseX o reWASD**, estos programas crean un mando virtual Xbox / XInput en Windows. En ese caso, **X-Charge sí los detecta perfectamente** a través de ese slot virtual de XInput.
+- **Pure Native XInput Engine (100% Safe & Stable)**:
+  - Built purely on Win32 XInput APIs (`XInputGetState` & `XInputGetBatteryInformation`).
+  - **Zero RF Interference**: completely eliminates the notorious wireless controller power-off bug during reconnection with the official Xbox Wireless Adapter for Windows.
+  - Instant connect & disconnect detection without stale COM or WinRT zombie references in memory.
+  - Multi-controller support: monitors up to 4 gamepads simultaneously with independent slot identification.
+- **Power & Charging Detection**:
+  - Instant distinction between wired USB power (`UsbCharged`) and wireless battery status (`Alkaline` / `NiMH` / `Play & Charge Kit`).
+  - 100% battery bug fix: percentages never disappear, and UI progress bars never overflow.
+  - Visual and audio low-battery notifications with configurable thresholds (10%, 15%, or 20%).
+- **Display Modes**:
+  - **Normal Mode**: Comprehensive dashboard displaying controller name, battery percentage, charging state, and status bar.
+  - **Compact Mode**: Minimalist circular floating widget with real-time percentage, freely draggable and resizable.
+  - **Interactive Mouse Wheel Opacity**: Hover over Compact Mode and scroll the mouse wheel to adjust transparency in real time (from 15% ultra-translucent up to 100% sharp/opaque). Features an animated HUD gauge and remembers your preference across reboots.
+- **OLED Anti-Burn-In Protection**:
+  - **Smooth Circular Orbit**: Imperceptible periodic harmonic displacement ($\Delta X = 8\cos\theta, \Delta Y = 8\sin\theta$) with gentle easing and micro text shifts every 20s to safeguard OLED/AMOLED screens without altering your chosen opacity.
+- **System Tray Integration**:
+  - Dynamic pixel-art tray icon showing real-time battery fill and external power symbol.
+  - Context menu: theme switching (Dark, Light, Transparent), USB/battery audio alerts, Windows startup, and customizable alert thresholds.
+- **Multi-Language Support**: 7 built-in languages (English, Spanish, French, German, Portuguese, Chinese, and Russian).
+- **Data Resilience**:
+  - Reliable settings storage in `%AppData%\X-Charge\config.json` with automated migration and corrupted config self-healing.
+- **Resource Hygiene**:
+  - Rigorous cleanup of static system events (`UserPreferenceChanged`) and single-instance Mutex lifecycle management.
 
 ---
 
-## 🛠️ Stack Tecnológico
+## 🎮 Controller Compatibility
 
-- **Framework**: .NET 8.0 SDK con WPF (`net8.0-windows10.0.19041.0`)
-- **Versión Mínima de Windows**: Windows 10 build 17763 (10.0.17763.0)
-- **APIs de Hardware**: `xinput1_4.dll` (con fallback a `xinput9_1_0.dll`)
-- **Paquetes NuGet**:
+- **Native XInput Controllers (Plug & Play, No Extra Software)**:
+  - **Official Xbox**: Xbox Series X/S, Xbox One, Xbox One S/X, Xbox Elite Series 1 & 2, Xbox 360 (via Official USB Wireless Adapter, USB cable, or Bluetooth).
+  - **Third-Party PC Controllers**: 8BitDo (Ultimate, Pro 2, SN30 Pro in X mode), GameSir (G7, Nova, Kaleid, T4 Pro), Logitech (F710, F310 in "X" mode), Razer, PowerA, PDP, Gulikit (KingKong 2/3), Flydigi, and any PC gamepad with an XInput mode switch.
+- **PlayStation (DualSense / PS5, DualShock 4 / PS4) & Nintendo Switch Pro**:
+  - Windows does not natively map PlayStation or Switch controllers to XInput (they register as standard DirectInput/HID devices).
+  - **However, if using mapping tools such as DS4Windows, Steam Input, DualSenseX, or reWASD**, these utilities emulate a virtual Xbox / XInput controller in Windows. In this setup, **X-Charge seamlessly detects them** through the virtual XInput slot.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: .NET 8.0 SDK with WPF (`net8.0-windows10.0.19041.0`)
+- **Minimum OS**: Windows 10 build 17763 (10.0.17763.0) or higher (Windows 11 fully supported)
+- **Hardware APIs**: `xinput1_4.dll` (with seamless fallback to `xinput9_1_0.dll`)
+- **NuGet Packages**:
   - `Hardcodet.NotifyIcon.Wpf` (v1.1.0)
   - `Microsoft.Toolkit.Uwp.Notifications` (v7.1.3)
 
 ---
 
-## 🚀 Compilación y Publicación Automatizada
+## 🚀 Building & Publishing
 
-Se incluye el script PowerShell `build.ps1` en la raíz del repositorio:
+An automated PowerShell build script `build.ps1` is included in the root directory:
 
 ```powershell
-# 1. Compilación limpia y empaquetado Single-File dependiente del framework (~24 MB)
+# 1. Framework-Dependent Single-File build (~24 MB)
 .\build.ps1 -Clean
 
-# 2. Publicación autónoma (Self-Contained con compresión, ~74 MB, no requiere .NET en destino)
+# 2. Self-Contained standalone executable (~74 MB, no .NET installation required on target machine)
 .\build.ps1 -SelfContained -Clean
 
-# 3. Compilar y ejecutar de inmediato
+# 3. Build and launch immediately
 .\build.ps1 -Run
 ```
 
-El script genera automáticamente el ejecutable único en `publish\X-Charge.exe` y sincroniza la instalación de producción si existe.
+Single-file executables are automatically generated under `publish\X-Charge.exe`.
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Este proyecto está bajo la Licencia MIT.
+This project is licensed under the [MIT License](LICENSE).
