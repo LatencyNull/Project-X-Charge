@@ -1,0 +1,21 @@
+## Build & Publish Artifacts
+[Bb]in/
+[Oo]bj/
+publish/
+
+## Visual Studio / IDEs
+.vs/
+.vscode/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.sln.docstates
+
+## System & Temporary Files
+Thumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.tmp
+*.corrupted
+*.bak
