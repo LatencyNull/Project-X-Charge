@@ -46,6 +46,8 @@ public partial class MainWindow : Window
 
 	private DispatcherTimer? _flashTimer;
 
+	private DispatcherTimer? _opacityMeterTimer;
+
 	private int _flashRemaining;
 
 	private int _flashColorIndex;
@@ -937,40 +939,64 @@ public partial class MainWindow : Window
 		_flashRemaining--;
 	}
 
+	private void CompactMode_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+	{
+		if (CompactModeBorder.Visibility != Visibility.Visible)
+		{
+			return;
+		}
+
+		e.Handled = true;
+
+		// Rueda hacia arriba (e.Delta > 0) -> Más nítido (incrementa opacidad hasta 1.0)
+		// Rueda hacia abajo (e.Delta < 0) -> Más transparente (reduce opacidad hasta 0.15)
+		double step = (e.Delta > 0) ? 0.05 : -0.05;
+		double newOpacity = Math.Clamp(Math.Round(AppSettings.Current.CompactOpacity + step, 2), 0.15, 1.0);
+
+		AppSettings.Current.CompactOpacity = newOpacity;
+		AppSettings.Current.Save();
+
+		ApplyCompactOpacity(newOpacity, showMeter: true);
+	}
+
+	private void ApplyCompactOpacity(double opacity, bool showMeter = false)
+	{
+		BeginAnimation(UIElement.OpacityProperty, null);
+		base.Opacity = opacity;
+
+		if (showMeter && CompactModeBorder.Visibility == Visibility.Visible)
+		{
+			int pct = (int)Math.Round(opacity * 100);
+			OpacityMeterText.Text = $"{pct}%";
+			OpacityMeterBar.Value = pct;
+
+			CompactPercentText.Visibility = Visibility.Collapsed;
+			OpacityMeterOverlay.Visibility = Visibility.Visible;
+
+			if (_opacityMeterTimer == null)
+			{
+				_opacityMeterTimer = new DispatcherTimer
+				{
+					Interval = TimeSpan.FromMilliseconds(1200)
+				};
+				_opacityMeterTimer.Tick += delegate
+				{
+					_opacityMeterTimer?.Stop();
+					OpacityMeterOverlay.Visibility = Visibility.Collapsed;
+					CompactPercentText.Visibility = Visibility.Visible;
+				};
+			}
+			_opacityMeterTimer.Stop();
+			_opacityMeterTimer.Start();
+		}
+	}
+
 	private void StartBreathingOpacity()
 	{
-		if (CompactModeBorder.Visibility != Visibility.Visible || !base.IsVisible)
+		if (CompactModeBorder.Visibility == Visibility.Visible)
 		{
-			return;
+			ApplyCompactOpacity(AppSettings.Current.CompactOpacity, showMeter: false);
 		}
-
-		if (base.IsMouseOver)
-		{
-			BeginAnimation(UIElement.OpacityProperty, null);
-			base.Opacity = 1.0;
-			return;
-		}
-
-		if (Controllers.Any((ControllerInfo c) => c.Percent <= (double)AppSettings.Current.LowBatteryThreshold && !c.IsCharging))
-		{
-			BeginAnimation(UIElement.OpacityProperty, null);
-			base.Opacity = 1.0;
-			return;
-		}
-
-		DoubleAnimation breathingAnimation = new DoubleAnimation
-		{
-			From = 0.28,
-			To = 0.48,
-			Duration = TimeSpan.FromSeconds(5.0),
-			AutoReverse = true,
-			RepeatBehavior = RepeatBehavior.Forever,
-			EasingFunction = new SineEase
-			{
-				EasingMode = EasingMode.EaseInOut
-			}
-		};
-		BeginAnimation(UIElement.OpacityProperty, breathingAnimation);
 	}
 
 	private void ToggleMode_Click(object sender, RoutedEventArgs e)
@@ -986,7 +1012,7 @@ public partial class MainWindow : Window
 			_anchorLeft = base.Left;
 			_anchorTop = base.Top;
 			_orbitAngle = 0.0;
-			StartBreathingOpacity();
+			ApplyCompactOpacity(AppSettings.Current.CompactOpacity, showMeter: false);
 			TriggerShineAnimation();
 		}
 		else
@@ -1140,11 +1166,6 @@ public partial class MainWindow : Window
 			}
 
 			TriggerShineAnimation();
-
-			if (!base.IsMouseOver && !Controllers.Any((ControllerInfo c) => c.Percent <= (double)AppSettings.Current.LowBatteryThreshold && !c.IsCharging))
-			{
-				StartBreathingOpacity();
-			}
 		}
 		else
 		{
@@ -1172,8 +1193,7 @@ public partial class MainWindow : Window
 		if (CompactModeBorder.Visibility == Visibility.Visible)
 		{
 			BeginAnimation(UIElement.OpacityProperty, null);
-			DoubleAnimation animation = new DoubleAnimation(1.0, TimeSpan.FromSeconds(0.15));
-			BeginAnimation(UIElement.OpacityProperty, animation);
+			base.Opacity = AppSettings.Current.CompactOpacity;
 		}
 	}
 
@@ -1192,7 +1212,8 @@ public partial class MainWindow : Window
 		}
 		else
 		{
-			StartBreathingOpacity();
+			BeginAnimation(UIElement.OpacityProperty, null);
+			base.Opacity = AppSettings.Current.CompactOpacity;
 		}
 	}
 

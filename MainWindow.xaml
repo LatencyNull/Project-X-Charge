@@ -154,7 +154,7 @@
         <TextBlock Name="StatusText" Grid.Row="2" Text="" FontSize="11" Foreground="#999999" Margin="0,4,0,0" Visibility="Collapsed" />
       </Grid>
     </Border>
-    <Border Name="CompactModeBorder" CornerRadius="10" BorderBrush="#404040" BorderThickness="1" Background="#E6202020" Visibility="Collapsed" ClipToBounds="True" ToolTip="Doble clic para probar efecto anti-quemado" MouseDown="CompactMode_MouseDown">
+    <Border Name="CompactModeBorder" CornerRadius="10" BorderBrush="#404040" BorderThickness="1" Background="#E6202020" Visibility="Collapsed" ClipToBounds="True" ToolTip="Gira la rueda del ratón para regular opacidad" MouseDown="CompactMode_MouseDown" PreviewMouseWheel="CompactMode_PreviewMouseWheel">
       <Grid>
         <Border Name="ShineOverlay" Width="60" Height="400" IsHitTestVisible="False" VerticalAlignment="Center" HorizontalAlignment="Left">
           <Border.Background>
@@ -176,6 +176,20 @@
             <TranslateTransform x:Name="TextShiftTransform" X="0" Y="0" />
           </UIElement.RenderTransform>
         </TextBlock>
+        <!-- Medidor de Opacidad Interactivo (Rueda del ratón) -->
+        <Grid Name="OpacityMeterOverlay" Visibility="Collapsed" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Border Background="#D9111827" CornerRadius="8" Padding="7,4" BorderBrush="#4038BDF8" BorderThickness="1">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Path Data="M12,4.5 C7,4.5 2.73,7.61 1,12 C2.73,16.39 7,19.5 12,19.5 C17,19.5 21.27,16.39 23,12 C21.27,7.61 17,4.5 12,4.5 Z M12,17 C9.24,17 7,14.76 7,12 C7,9.24 9.24,7 12,7 C14.76,7 17,9.24 17,12 C17,14.76 14.76,17 12,17 Z M12,9 C10.34,9 9,10.34 9,12 C9,13.66 10.34,15 12,15 C13.66,15 15,13.66 15,12 C15,10.34 13.66,9 12,9 Z" 
+                      Fill="#38BDF8" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Name="OpacityMeterText" Text="85%" FontSize="12" FontWeight="Bold" Foreground="#38BDF8" VerticalAlignment="Center" />
+              </StackPanel>
+              <ProgressBar Name="OpacityMeterBar" Width="40" Height="3" Minimum="15" Maximum="100" Value="85" 
+                           Background="#26FFFFFF" Foreground="#38BDF8" BorderThickness="0" Margin="0,3,0,0" />
+            </StackPanel>
+          </Border>
+        </Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4">
           <Button Name="FullModeButton" Content="◲" Width="16" Height="16" Background="#00FFFFFF" BorderThickness="0" Foreground="#AAAAAA" Cursor="Hand" ToolTip="Modo normal" FontSize="12" Click="ToggleMode_Click" />
         </StackPanel>

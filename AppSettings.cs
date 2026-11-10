@@ -9,6 +9,7 @@ public class AppSettings
 	private int _lowBatteryThreshold = 20;
 	private int _pollIntervalSeconds = 3;
 	private int _flashCount = 13;
+	private double _compactOpacity = 0.85;
 
 	public int LowBatteryThreshold
 	{
@@ -37,6 +38,12 @@ public class AppSettings
 	}
 
 	public bool HideUntilLowBattery { get; set; } = false;
+
+	public double CompactOpacity
+	{
+		get => _compactOpacity;
+		set => _compactOpacity = Math.Clamp(Math.Round(value, 2), 0.15, 1.0);
+	}
 
 	private static string ConfigFolder
 	{
