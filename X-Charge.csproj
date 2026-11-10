@@ -11,7 +11,13 @@
     <RootNamespace>XboxBatteryMonitor</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
-      <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>X-Charge</Product>
+    <Description>Monitor de batería flotante premium para mandos Xbox y compatibles con XInput en Windows 10/11</Description>
+    <Authors>LatencyNull</Authors>
   </PropertyGroup>
 
   <ItemGroup>
