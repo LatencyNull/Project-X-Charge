@@ -7,30 +7,11 @@ namespace XboxBatteryMonitor;
 
 public class ControllerInfo : INotifyPropertyChanged
 {
-	private string _id = "";
-
 	private string _name = "";
-
 	private double _percent;
-
 	private string _statusText = "";
-
 	private SolidColorBrush _batteryColor = new SolidColorBrush(Colors.Transparent);
-
 	private bool _isCharging;
-
-	public string Id
-	{
-		get => _id;
-		set
-		{
-			if (_id != value)
-			{
-				_id = value;
-				OnPropertyChanged();
-			}
-		}
-	}
 
 	public string Name
 	{
@@ -98,17 +79,13 @@ public class ControllerInfo : INotifyPropertyChanged
 		}
 	}
 
-	public double LastWirelessPercent { get; set; } = -1.0;
-
 	public int XInputSlot { get; set; } = -1;
 
 	public bool WasOnExternalPower { get; set; }
 
+	public bool HasCheckedExternalPowerOnce { get; set; }
+
 	public bool LowBatteryWarned { get; set; }
-
-	public bool IsEstimated { get; set; }
-
-	public DateTime ConnectedTimestamp { get; set; } = DateTime.UtcNow;
 
 	public string DisplayPercentText => Percent >= 0 ? $"{Math.Round(Percent)}%" : "--%";
 

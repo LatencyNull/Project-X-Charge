@@ -10,6 +10,7 @@ public class AppSettings
 	private int _pollIntervalSeconds = 3;
 	private int _flashCount = 13;
 	private double _compactOpacity = 0.85;
+	private double _compactSize = 80.0;
 
 	public int LowBatteryThreshold
 	{
@@ -38,6 +39,24 @@ public class AppSettings
 	}
 
 	public bool HideUntilLowBattery { get; set; } = false;
+
+	public string Language { get; set; } = "";
+
+	public bool ClickThroughEnabled { get; set; } = false;
+
+	public bool HotKeyEnabled { get; set; } = true;
+
+	public bool IsCompactMode { get; set; } = false;
+
+	public double CompactSize
+	{
+		get => _compactSize;
+		set => _compactSize = Math.Clamp(value, 60.0, 300.0);
+	}
+
+	public double? WindowLeft { get; set; } = null;
+
+	public double? WindowTop { get; set; } = null;
 
 	public double CompactOpacity
 	{
@@ -79,6 +98,8 @@ public class AppSettings
 	private static AppSettings Load()
 	{
 		string path = ConfigPath;
+		string bakPath = ConfigPath + ".bak";
+
 		if (File.Exists(path))
 		{
 			try
@@ -91,31 +112,78 @@ public class AppSettings
 			}
 			catch (Exception)
 			{
-				// Si el JSON está dañado, respaldar para diagnóstico y no crashear
+				// Si el JSON principal está dañado, respaldar para diagnóstico
 				try
 				{
 					string backup = path + ".corrupted";
-					if (File.Exists(path) && !File.Exists(backup))
+					if (!File.Exists(backup))
 					{
 						File.Copy(path, backup);
 					}
 				}
 				catch { }
+
+				// Intentar restaurar desde respaldo .bak automático
+				if (File.Exists(bakPath))
+				{
+					try
+					{
+						string bakJson = File.ReadAllText(bakPath);
+						if (!string.IsNullOrWhiteSpace(bakJson))
+						{
+							return JsonSerializer.Deserialize<AppSettings>(bakJson) ?? new AppSettings();
+						}
+					}
+					catch { }
+				}
 			}
 		}
+		else if (File.Exists(bakPath))
+		{
+			try
+			{
+				string bakJson = File.ReadAllText(bakPath);
+				if (!string.IsNullOrWhiteSpace(bakJson))
+				{
+					return JsonSerializer.Deserialize<AppSettings>(bakJson) ?? new AppSettings();
+				}
+			}
+			catch { }
+		}
+
 		return new AppSettings();
 	}
 
+	private static readonly object _saveLock = new();
+
 	public void Save()
 	{
-		try
+		lock (_saveLock)
 		{
-			string json = JsonSerializer.Serialize(this, new JsonSerializerOptions
+			try
 			{
-				WriteIndented = true
-			});
-			File.WriteAllText(ConfigPath, json);
+				string json = JsonSerializer.Serialize(this, new JsonSerializerOptions
+				{
+					WriteIndented = true
+				});
+				string tempPath = ConfigPath + ".tmp";
+				string bakPath = ConfigPath + ".bak";
+
+				File.WriteAllText(tempPath, json);
+
+				// Mantener copia de seguridad .bak antes de sobreescribir el archivo activo
+				if (File.Exists(ConfigPath))
+				{
+					try
+					{
+						File.Copy(ConfigPath, bakPath, overwrite: true);
+					}
+					catch { }
+				}
+
+				File.Move(tempPath, ConfigPath, overwrite: true);
+			}
+			catch { }
 		}
-		catch { }
 	}
 }

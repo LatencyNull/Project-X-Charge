@@ -1,169 +1,338 @@
 using System;
-using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Markup;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.Toolkit.Uwp.Notifications;
 using Microsoft.Win32;
+using XboxBatteryMonitor.Services;
 
 namespace XboxBatteryMonitor;
 
 public partial class MainWindow : Window
 {
 	private readonly DispatcherTimer _timer;
+	private readonly DispatcherTimer _burnInTimer;
+	private readonly HotKeyService _hotKeyService;
 
+	private CancellationTokenSource? _soundCts;
 	private bool _isExiting;
-
+	private bool _isHiding;
 	private double _compactSize = 80.0;
-
-	private DispatcherTimer _burnInTimer;
-
-	private UserPreferenceChangedEventHandler? _userPreferenceChangedHandler;
-
 	private double _anchorLeft = double.NaN;
-
 	private double _anchorTop = double.NaN;
-
 	private double _orbitAngle;
 
-	private MediaPlayer? _alertMediaPlayer;
+	[DllImport("user32.dll")]
+	private static extern short GetAsyncKeyState(int vKey);
+
+	private const int VK_SHIFT = 0x10;
+	private const int VK_CONTROL = 0x11;
+
+	private DispatcherTimer? _ghostBypassTimer;
+	private bool _isGhostTemporarilyBypassed;
 
 	private DispatcherTimer? _flashTimer;
-
 	private DispatcherTimer? _opacityMeterTimer;
-
+	private DispatcherTimer? _saveSettingsTimer;
 	private int _flashRemaining;
-
 	private int _flashColorIndex;
-
 	private System.Windows.Media.Brush? _originalBackground;
 
-	private static readonly System.Windows.Media.Color[] FlashColors = new System.Windows.Media.Color[6]
+	private static readonly SolidColorBrush[] FlashBrushes = new SolidColorBrush[]
 	{
-		System.Windows.Media.Color.FromRgb(226, 75, 74),
-		System.Windows.Media.Color.FromRgb(245, 166, 35),
-		System.Windows.Media.Color.FromRgb(250, 204, 21),
-		System.Windows.Media.Color.FromRgb(226, 75, 74),
-		System.Windows.Media.Color.FromRgb(byte.MaxValue, 96, 96),
-		System.Windows.Media.Color.FromRgb(245, 166, 35)
+		CreateFrozenBrush(226, 75, 74),
+		CreateFrozenBrush(245, 166, 35),
+		CreateFrozenBrush(250, 204, 21),
+		CreateFrozenBrush(226, 75, 74),
+		CreateFrozenBrush(255, 96, 96),
+		CreateFrozenBrush(245, 166, 35)
 	};
 
-	public ObservableCollection<ControllerInfo> Controllers { get; } = new ObservableCollection<ControllerInfo>();
-
-
-	private Border ActiveBorder
+	private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b, byte a = 230)
 	{
-		get
-		{
-			if (FullModeBorder.Visibility != 0)
-			{
-				return CompactModeBorder;
-			}
-			return FullModeBorder;
-		}
+		SolidColorBrush brush = new(System.Windows.Media.Color.FromArgb(a, r, g, b));
+		brush.Freeze();
+		return brush;
 	}
 
-	[DllImport("winmm.dll", SetLastError = true)]
-	public static extern bool PlaySound(string pszSound, nint hmod, uint fdwSound);
+	public static readonly DependencyProperty TrackBarBrushProperty =
+		DependencyProperty.Register(nameof(TrackBarBrush), typeof(System.Windows.Media.Brush), typeof(MainWindow),
+			new PropertyMetadata(CreateFrozenBrush(51, 51, 51, 255)));
+
+	public System.Windows.Media.Brush TrackBarBrush
+	{
+		get => (System.Windows.Media.Brush)GetValue(TrackBarBrushProperty);
+		set => SetValue(TrackBarBrushProperty, value);
+	}
+
+	public static readonly DependencyProperty SubtitleBrushProperty =
+		DependencyProperty.Register(nameof(SubtitleBrush), typeof(System.Windows.Media.Brush), typeof(MainWindow),
+			new PropertyMetadata(CreateFrozenBrush(153, 153, 153, 255)));
+
+	public System.Windows.Media.Brush SubtitleBrush
+	{
+		get => (System.Windows.Media.Brush)GetValue(SubtitleBrushProperty);
+		set => SetValue(SubtitleBrushProperty, value);
+	}
+
+	public ObservableCollection<ControllerInfo> Controllers { get; } = new();
 
 	public MainWindow()
 	{
-		//IL_0062: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0067: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0082: Expected O, but got Unknown
-		//IL_00ab: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00b0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00c9: Expected O, but got Unknown
-		//IL_0102: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0107: Unknown result type (might be due to invalid IL or missing references)
 		InitializeComponent();
+		_hotKeyService = new HotKeyService(this);
 		ApplyLanguage();
 		_originalBackground = FullModeBorder.Background;
 		SetupTray();
+
 		_timer = new DispatcherTimer
 		{
 			Interval = TimeSpan.FromSeconds(AppSettings.Current.PollIntervalSeconds)
 		};
-		_timer.Tick += delegate
-		{
-			UpdateBatteryStatus();
-		};
+		_timer.Tick += (s, e) => UpdateBatteryStatus();
 		_timer.Start();
-		UpdateBatteryStatus();
+
 		_burnInTimer = new DispatcherTimer
 		{
 			Interval = TimeSpan.FromSeconds(20.0)
 		};
 		_burnInTimer.Tick += BurnInTimer_Tick;
 		_burnInTimer.Start();
-		AutoSyncWindowsTheme();
-		_userPreferenceChangedHandler = delegate(object s, UserPreferenceChangedEventArgs e)
+
+		// Respetar tema guardado en AppSettings.Current
+		SetTheme(AppSettings.Current.ThemeIndex);
+
+		SourceInitialized += MainWindow_SourceInitialized;
+		UpdateBatteryStatus();
+	}
+
+	private bool _isInitialized;
+	private const int WM_DISPLAYCHANGE = 0x007E;
+	private const int WM_DPICHANGED = 0x02E0;
+
+	[DllImport("user32.dll", SetLastError = true)]
+	private static extern bool ChangeWindowMessageFilter(uint message, uint dwFlag);
+	private const uint MSGFLT_ADD = 1;
+
+	[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+	private static extern uint RegisterWindowMessage(string lpString);
+
+	private static readonly uint WmShowAppInstance = RegisterWindowMessage("XCHARGE_SHOW_APP");
+
+	private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+	{
+		EnsureWindowInitialized();
+		nint handle = new WindowInteropHelper(this).Handle;
+		if (handle != IntPtr.Zero)
 		{
-			if (e.Category == UserPreferenceCategory.General)
+			HwndSource? source = HwndSource.FromHwnd(handle);
+			source?.AddHook(WndProc);
+			try
 			{
-				((DispatcherObject)this).Dispatcher.Invoke((Action)AutoSyncWindowsTheme);
+				ChangeWindowMessageFilter(WmShowAppInstance, MSGFLT_ADD);
 			}
-		};
-		SystemEvents.UserPreferenceChanged += _userPreferenceChangedHandler;
-		Rect workArea = SystemParameters.WorkArea;
-		base.Left = workArea.Right - base.Width - 20.0;
-		base.Top = workArea.Top + 20.0;
-		base.Closing += delegate(object? _, CancelEventArgs e)
+			catch { }
+		}
+	}
+
+	private nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+	{
+		if (msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED)
 		{
-			if (!_isExiting)
+			ClampWindowToCurrentMonitor();
+		}
+		else if (msg == WmShowAppInstance)
+		{
+			ShowWindow();
+			handled = true;
+		}
+		return IntPtr.Zero;
+	}
+
+	private void Window_KeyDown(object sender, KeyEventArgs e)
+	{
+		if (e.Key == Key.Escape)
+		{
+			HideWindow();
+			e.Handled = true;
+		}
+	}
+
+	private void EnsureWindowInitialized()
+	{
+		if (_isInitialized) return;
+		_isInitialized = true;
+
+		// 1. Restaurar tamaño personalizado si existe
+		if (AppSettings.Current.CompactSize >= 60.0 && AppSettings.Current.CompactSize <= 300.0)
+		{
+			_compactSize = AppSettings.Current.CompactSize;
+		}
+
+		// 2. Restaurar posición previa de ventana si está guardada (validando que no quede fuera de pantalla)
+		if (AppSettings.Current.WindowLeft.HasValue && AppSettings.Current.WindowTop.HasValue)
+		{
+			double left = AppSettings.Current.WindowLeft.Value;
+			double top = AppSettings.Current.WindowTop.Value;
+			double width = AppSettings.Current.IsCompactMode ? _compactSize : 260.0;
+			double height = AppSettings.Current.IsCompactMode ? _compactSize : 150.0;
+
+			Rect virtualScreen = new(
+				SystemParameters.VirtualScreenLeft,
+				SystemParameters.VirtualScreenTop,
+				SystemParameters.VirtualScreenWidth,
+				SystemParameters.VirtualScreenHeight);
+
+			Rect savedRect = new(left, top, width, height);
+			if (virtualScreen.IntersectsWith(savedRect))
 			{
-				e.Cancel = true;
-				HideWindow();
+				Left = left;
+				Top = top;
 			}
 			else
 			{
-				if (_userPreferenceChangedHandler != null)
-				{
-					SystemEvents.UserPreferenceChanged -= _userPreferenceChangedHandler;
-					_userPreferenceChangedHandler = null;
-				}
+				// Si el monitor secundario fue desconectado, devolver al área de trabajo principal visible
+				Rect workArea = SystemParameters.WorkArea;
+				Left = Math.Max(workArea.Left, Math.Min(workArea.Right - width, left));
+				Top = Math.Max(workArea.Top, Math.Min(workArea.Bottom - height, top));
 			}
-		};
+		}
+
+		// 3. Restaurar Modo Compacto si fue el último modo activo
+		if (AppSettings.Current.IsCompactMode)
+		{
+			SwitchToCompactMode();
+		}
+
+		// 4. Registrar atajo de teclado global si está habilitado
+		if (AppSettings.Current.HotKeyEnabled)
+		{
+			bool registered = _hotKeyService.Register(ToggleWindow);
+			if (!registered)
+			{
+				AppSettings.Current.HotKeyEnabled = false;
+				if (HotKeyItem != null) HotKeyItem.IsChecked = false;
+			}
+		}
+
+		ApplyClickThrough();
+	}
+
+	public void SaveCurrentState()
+	{
+		double currentLeft = (WindowState == WindowState.Minimized) ? RestoreBounds.Left : Left;
+		double currentTop = (WindowState == WindowState.Minimized) ? RestoreBounds.Top : Top;
+
+		if (currentLeft > -10000 && currentTop > -10000)
+		{
+			AppSettings.Current.WindowLeft = (!double.IsNaN(_anchorLeft) && CompactModeBorder.Visibility == Visibility.Visible)
+				? _anchorLeft
+				: currentLeft;
+			AppSettings.Current.WindowTop = (!double.IsNaN(_anchorTop) && CompactModeBorder.Visibility == Visibility.Visible)
+				? _anchorTop
+				: currentTop;
+		}
+		AppSettings.Current.IsCompactMode = (CompactModeBorder.Visibility == Visibility.Visible);
+		AppSettings.Current.CompactSize = _compactSize;
+		AppSettings.Current.Save();
+	}
+
+	public void ClampWindowToCurrentMonitor()
+	{
+		Rect workArea = WindowStyleService.GetCurrentMonitorWorkArea(this);
+		double curWidth = (CompactModeBorder.Visibility == Visibility.Visible) ? _compactSize : 260.0;
+		double curHeight = (CompactModeBorder.Visibility == Visibility.Visible) ? _compactSize : (ActualHeight > 50.0 ? ActualHeight : 150.0);
+
+		double clampedLeft = Math.Clamp(Left, workArea.Left, Math.Max(workArea.Left, workArea.Right - curWidth));
+		double clampedTestTop = Math.Clamp(Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - curHeight));
+
+		if (Math.Abs(clampedLeft - Left) > 1.0 || Math.Abs(clampedTestTop - Top) > 1.0)
+		{
+			Left = clampedLeft;
+			Top = clampedTestTop;
+			if (CompactModeBorder.Visibility == Visibility.Visible)
+			{
+				_anchorLeft = Left;
+				_anchorTop = Top;
+			}
+			RequestSaveSettings();
+		}
+	}
+
+	private void RequestSaveSettings()
+	{
+		if (_saveSettingsTimer == null)
+		{
+			_saveSettingsTimer = new DispatcherTimer
+			{
+				Interval = TimeSpan.FromMilliseconds(500)
+			};
+			_saveSettingsTimer.Tick += (s, e) =>
+			{
+				_saveSettingsTimer?.Stop();
+				AppSettings.Current.Save();
+			};
+		}
+		_saveSettingsTimer.Stop();
+		_saveSettingsTimer.Start();
 	}
 
 	private void SetupTray()
 	{
-		ToggleWindowItem.Header = Strings.Get("Show");
-		DarkThemeItem.IsChecked = AppSettings.Current.ThemeIndex == 0;
-		LightThemeItem.IsChecked = AppSettings.Current.ThemeIndex == 1;
-		TransparentThemeItem.IsChecked = AppSettings.Current.ThemeIndex == 2;
+		if (TrayIcon == null) return;
+
+		// 1. Temas
+		DarkThemeItem.IsChecked = (AppSettings.Current.ThemeIndex == 0);
+		LightThemeItem.IsChecked = (AppSettings.Current.ThemeIndex == 1);
+		TransparentThemeItem.IsChecked = (AppSettings.Current.ThemeIndex == 2);
+
+		// 2. Idiomas
+		string curLang = Strings.CurrentLanguage;
+		LangEnItem.IsChecked = (curLang == "en");
+		LangEsItem.IsChecked = (curLang == "es");
+		LangFrItem.IsChecked = (curLang == "fr");
+		LangDeItem.IsChecked = (curLang == "de");
+		LangPtItem.IsChecked = (curLang == "pt");
+		LangZhItem.IsChecked = (curLang == "zh");
+		LangRuItem.IsChecked = (curLang == "ru");
+
+		// 3. Sonidos
 		UsbSoundItem.IsChecked = AppSettings.Current.SoundUsbEnabled;
 		BatterySoundItem.IsChecked = AppSettings.Current.SoundBatteryEnabled;
-		Th10Item.IsChecked = AppSettings.Current.LowBatteryThreshold == 10;
-		Th15Item.IsChecked = AppSettings.Current.LowBatteryThreshold == 15;
-		Th20Item.IsChecked = AppSettings.Current.LowBatteryThreshold == 20;
-		StartupItem.IsChecked = IsStartupEnabled();
-		if (HideUntilLowItem != null)
-		{
-			HideUntilLowItem.IsChecked = AppSettings.Current.HideUntilLowBattery;
-		}
-		if (StartInTrayItem != null)
-		{
-			StartInTrayItem.IsChecked = AppSettings.Current.StartInTray;
-		}
-		TrayIcon.Icon = GenerateBatteryIcon(-1.0, isCharging: false, isConnected: false);
-		SetTheme(AppSettings.Current.ThemeIndex);
+
+		// 4. Umbrales
+		int threshold = AppSettings.Current.LowBatteryThreshold;
+		Th10Item.IsChecked = (threshold == 10);
+		Th15Item.IsChecked = (threshold == 15);
+		Th20Item.IsChecked = (threshold == 20);
+
+		// 5. Frecuencia de sondeo
+		int pollSec = AppSettings.Current.PollIntervalSeconds;
+		Poll1sItem.IsChecked = (pollSec == 1);
+		Poll2sItem.IsChecked = (pollSec == 2);
+		Poll3sItem.IsChecked = (pollSec == 3);
+		Poll5sItem.IsChecked = (pollSec == 5);
+
+		// 6. Opciones avanzadas
+		GhostModeItem.IsChecked = AppSettings.Current.ClickThroughEnabled;
+		HotKeyItem.IsChecked = AppSettings.Current.HotKeyEnabled;
+		StartupItem.IsChecked = StartupService.IsStartupEnabled();
+		StartInTrayItem.IsChecked = AppSettings.Current.StartInTray;
+		HideUntilLowItem.IsChecked = AppSettings.Current.HideUntilLowBattery;
 	}
 
 	private void TrayIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
@@ -178,9 +347,25 @@ public partial class MainWindow : Window
 
 	private void ThemeItem_Click(object sender, RoutedEventArgs e)
 	{
-		if (sender is MenuItem { Tag: string tag } && int.TryParse(tag, out var result))
+		if (sender is MenuItem menuItem && menuItem.Tag is string tag && int.TryParse(tag, out int themeIndex))
 		{
-			SetTheme(result);
+			SetTheme(themeIndex);
+			AppSettings.Current.ThemeIndex = themeIndex;
+			AppSettings.Current.Save();
+			SetupTray();
+		}
+	}
+
+	private void LanguageItem_Click(object sender, RoutedEventArgs e)
+	{
+		if (sender is MenuItem menuItem && menuItem.Tag is string langCode)
+		{
+			if (Strings.SetLanguage(langCode))
+			{
+				ApplyLanguage();
+				SetupTray();
+				UpdateBatteryStatus();
+			}
 		}
 	}
 
@@ -198,21 +383,60 @@ public partial class MainWindow : Window
 
 	private void ThresholdItem_Click(object sender, RoutedEventArgs e)
 	{
-		if (sender is MenuItem { Tag: string tag } menuItem && int.TryParse(tag, out var result))
+		if (sender is MenuItem menuItem && menuItem.Tag is string tag && int.TryParse(tag, out int threshold))
 		{
-			Th10Item.IsChecked = false;
-			Th15Item.IsChecked = false;
-			Th20Item.IsChecked = false;
-			menuItem.IsChecked = true;
-			AppSettings.Current.LowBatteryThreshold = result;
+			AppSettings.Current.LowBatteryThreshold = threshold;
 			AppSettings.Current.Save();
+			SetupTray();
 			UpdateBatteryStatus();
+		}
+	}
+
+	private void PollIntervalItem_Click(object sender, RoutedEventArgs e)
+	{
+		if (sender is MenuItem menuItem && menuItem.Tag is string tag && int.TryParse(tag, out int interval))
+		{
+			AppSettings.Current.PollIntervalSeconds = interval;
+			AppSettings.Current.Save();
+			_timer.Interval = TimeSpan.FromSeconds(interval);
+			SetupTray();
+		}
+	}
+
+	private void GhostModeItem_Click(object sender, RoutedEventArgs e)
+	{
+		AppSettings.Current.ClickThroughEnabled = GhostModeItem.IsChecked;
+		AppSettings.Current.Save();
+		ApplyClickThrough();
+	}
+
+	private void HotKeyItem_Click(object sender, RoutedEventArgs e)
+	{
+		if (HotKeyItem.IsChecked)
+		{
+			bool registered = _hotKeyService.Register(ToggleWindow);
+			if (!registered)
+			{
+				HotKeyItem.IsChecked = false;
+				AppSettings.Current.HotKeyEnabled = false;
+				AppSettings.Current.Save();
+				MessageBox.Show(Strings.Get("HotKeyConflict"), "X-Charge", MessageBoxButton.OK, MessageBoxImage.Warning);
+				return;
+			}
+			AppSettings.Current.HotKeyEnabled = true;
+			AppSettings.Current.Save();
+		}
+		else
+		{
+			AppSettings.Current.HotKeyEnabled = false;
+			AppSettings.Current.Save();
+			_hotKeyService.Unregister();
 		}
 	}
 
 	private void StartupItem_Click(object sender, RoutedEventArgs e)
 	{
-		ToggleStartup(StartupItem.IsChecked);
+		StartupService.SetStartup(StartupItem.IsChecked);
 	}
 
 	private void StartInTrayItem_Click(object sender, RoutedEventArgs e)
@@ -233,114 +457,145 @@ public partial class MainWindow : Window
 		ExitApp();
 	}
 
-	private void SetTheme(int index)
+	private void EnsureGhostBypassTimer()
 	{
-		AppSettings.Current.ThemeIndex = index;
-		AppSettings.Current.Save();
-		if (DarkThemeItem != null)
+		if (_ghostBypassTimer == null)
 		{
-			DarkThemeItem.IsChecked = index == 0;
+			_ghostBypassTimer = new DispatcherTimer
+			{
+				Interval = TimeSpan.FromMilliseconds(50.0)
+			};
+			_ghostBypassTimer.Tick += GhostBypassTimer_Tick;
 		}
-		if (LightThemeItem != null)
+		if (!_ghostBypassTimer.IsEnabled)
 		{
-			LightThemeItem.IsChecked = index == 1;
+			_ghostBypassTimer.Start();
 		}
-		if (TransparentThemeItem != null)
+	}
+
+	private void GhostBypassTimer_Tick(object? sender, EventArgs e)
+	{
+		if (!AppSettings.Current.ClickThroughEnabled || CompactModeBorder.Visibility != Visibility.Visible || !IsVisible)
 		{
-			TransparentThemeItem.IsChecked = index == 2;
+			_ghostBypassTimer?.Stop();
+			if (_isGhostTemporarilyBypassed)
+			{
+				_isGhostTemporarilyBypassed = false;
+				ApplyClickThrough();
+			}
+			return;
 		}
-		System.Windows.Media.Color color;
-		System.Windows.Media.Color color2;
-		System.Windows.Media.Color color3;
-		System.Windows.Media.Color color4;
-		System.Windows.Media.Color color5;
-		if (AppSettings.Current.ThemeIndex == 0)
+
+		// Detectar si Shift o Ctrl están sostenidos para anular temporalmente el click-through
+		bool isPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0 || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+		if (isPressed != _isGhostTemporarilyBypassed)
 		{
-			color = System.Windows.Media.Color.FromArgb(230, 32, 32, 32);
-			color2 = System.Windows.Media.Color.FromRgb(64, 64, 64);
-			color3 = System.Windows.Media.Color.FromRgb(byte.MaxValue, byte.MaxValue, byte.MaxValue);
-			color4 = System.Windows.Media.Color.FromRgb(153, 153, 153);
-			color5 = System.Windows.Media.Color.FromRgb(170, 170, 170);
-			System.Windows.Media.Color.FromRgb(51, 51, 51);
+			_isGhostTemporarilyBypassed = isPressed;
+			ApplyClickThrough();
 		}
-		else if (AppSettings.Current.ThemeIndex == 1)
+	}
+
+	private void ApplyClickThrough()
+	{
+		bool isGhostActive = AppSettings.Current.ClickThroughEnabled && (CompactModeBorder.Visibility == Visibility.Visible);
+		bool shouldBeClickThrough = isGhostActive && !_isGhostTemporarilyBypassed;
+		WindowStyleService.SetClickThrough(this, shouldBeClickThrough);
+
+		if (isGhostActive)
 		{
-			color = System.Windows.Media.Color.FromArgb(230, 245, 245, 245);
-			color2 = System.Windows.Media.Color.FromRgb(200, 200, 200);
-			color3 = System.Windows.Media.Color.FromRgb(30, 30, 30);
-			color4 = System.Windows.Media.Color.FromRgb(100, 100, 100);
-			color5 = System.Windows.Media.Color.FromRgb(100, 100, 100);
-			System.Windows.Media.Color.FromRgb(220, 220, 220);
+			EnsureGhostBypassTimer();
+			GhostIndicator.Visibility = Visibility.Visible;
+
+			if (_isGhostTemporarilyBypassed)
+			{
+				// Modo temporal desbloqueado: Shift o Ctrl presionado
+				GhostIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(255, 52, 211, 153)); // Verde brillante
+				GhostIndicator.ToolTip = Strings.Get("GhostUnlockedTip");
+				FullModeButton.Visibility = Visibility.Visible;
+				ResizeThumb.Visibility = Visibility.Visible;
+			}
+			else
+			{
+				// Modo fantasma activo: clics atraviesan hacia el juego
+				GhostIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(128, 56, 189, 248)); // Azul cielo translúcido
+				GhostIndicator.ToolTip = Strings.Get("GhostLockedTip");
+				FullModeButton.Visibility = Visibility.Collapsed;
+				ResizeThumb.Visibility = Visibility.Collapsed;
+			}
 		}
 		else
 		{
-			color = System.Windows.Media.Color.FromArgb(2, 0, 0, 0);
-			color2 = System.Windows.Media.Color.FromArgb(0, 0, 0, 0);
-			color3 = System.Windows.Media.Color.FromRgb(byte.MaxValue, byte.MaxValue, byte.MaxValue);
-			color4 = System.Windows.Media.Color.FromRgb(200, 200, 200);
-			color5 = System.Windows.Media.Color.FromRgb(200, 200, 200);
-			System.Windows.Media.Color.FromArgb(100, 51, 51, 51);
+			_ghostBypassTimer?.Stop();
+			_isGhostTemporarilyBypassed = false;
+			GhostIndicator.Visibility = Visibility.Collapsed;
+			FullModeButton.Visibility = Visibility.Visible;
+			ResizeThumb.Visibility = Visibility.Visible;
 		}
-		FullModeBorder.Background = new SolidColorBrush(color);
-		CompactModeBorder.Background = new SolidColorBrush(color);
-		FullModeBorder.BorderBrush = new SolidColorBrush(color2);
-		CompactModeBorder.BorderBrush = new SolidColorBrush(color2);
-		_originalBackground = FullModeBorder.Background;
-		TitleText.Foreground = new SolidColorBrush(color3);
-		StatusText.Foreground = new SolidColorBrush(color4);
-		CompactButton.Foreground = new SolidColorBrush(color5);
-		MinimizeButton.Foreground = new SolidColorBrush(color5);
-		CloseButton.Foreground = new SolidColorBrush(color5);
-		FullModeButton.Foreground = new SolidColorBrush(color5);
+	}
+
+	private void SetTheme(int index)
+	{
+		System.Windows.Media.Color bgColor;
+		System.Windows.Media.Color borderColor;
+		System.Windows.Media.Color textColor;
+		System.Windows.Media.Color subtitleColor;
+		System.Windows.Media.Color iconColor;
+		System.Windows.Media.Color trackBarColor;
+
+		switch (index)
+		{
+			case 1: // Claro
+				bgColor = System.Windows.Media.Color.FromArgb(230, 240, 240, 240);
+				borderColor = System.Windows.Media.Color.FromRgb(200, 200, 200);
+				textColor = System.Windows.Media.Color.FromRgb(30, 30, 30);
+				subtitleColor = System.Windows.Media.Color.FromRgb(110, 110, 110);
+				iconColor = System.Windows.Media.Color.FromRgb(80, 80, 80);
+				trackBarColor = System.Windows.Media.Color.FromRgb(215, 215, 215);
+				break;
+			case 2: // Transparente
+				bgColor = System.Windows.Media.Color.FromArgb(120, 15, 15, 15);
+				borderColor = System.Windows.Media.Color.FromArgb(80, 255, 255, 255);
+				textColor = System.Windows.Media.Color.FromRgb(240, 240, 240);
+				subtitleColor = System.Windows.Media.Color.FromRgb(170, 170, 170);
+				iconColor = System.Windows.Media.Color.FromRgb(200, 200, 200);
+				trackBarColor = System.Windows.Media.Color.FromArgb(150, 40, 40, 40);
+				break;
+			default: // Oscuro
+				bgColor = System.Windows.Media.Color.FromArgb(230, 32, 32, 32);
+				borderColor = System.Windows.Media.Color.FromRgb(64, 64, 64);
+				textColor = System.Windows.Media.Color.FromRgb(220, 220, 220);
+				subtitleColor = System.Windows.Media.Color.FromRgb(153, 153, 153);
+				iconColor = System.Windows.Media.Color.FromRgb(170, 170, 170);
+				trackBarColor = System.Windows.Media.Color.FromRgb(51, 51, 51);
+				break;
+		}
+
+		SolidColorBrush bgBrush = new(bgColor); bgBrush.Freeze();
+		SolidColorBrush borderBrush = new(borderColor); borderBrush.Freeze();
+		SolidColorBrush textBrush = new(textColor); textBrush.Freeze();
+		SolidColorBrush subBrush = new(subtitleColor); subBrush.Freeze();
+		SolidColorBrush iconBrush = new(iconColor); iconBrush.Freeze();
+		SolidColorBrush trackBrush = new(trackBarColor); trackBrush.Freeze();
+
+		Foreground = textBrush;
+		TrackBarBrush = trackBrush;
+		SubtitleBrush = subBrush;
+
+		FullModeBorder.Background = bgBrush;
+		FullModeBorder.BorderBrush = borderBrush;
+		CompactModeBorder.Background = bgBrush;
+		CompactModeBorder.BorderBrush = borderBrush;
+		_originalBackground = bgBrush;
+
+		TitleText.Foreground = textBrush;
+		CompactPercentText.Foreground = textBrush;
+		CompactButton.Foreground = iconBrush;
+		MinimizeButton.Foreground = iconBrush;
+		CloseButton.Foreground = iconBrush;
+		FullModeButton.Foreground = iconBrush;
+
 		UpdateBatteryStatus();
 	}
-
-	private static Icon GenerateBatteryIcon(double percent, bool isCharging, bool isConnected)
-	{
-		using Bitmap bitmap = new Bitmap(16, 16);
-		using Graphics graphics = Graphics.FromImage(bitmap);
-		graphics.SmoothingMode = SmoothingMode.AntiAlias;
-		graphics.Clear(System.Drawing.Color.Transparent);
-		System.Drawing.Color color = System.Drawing.Color.FromArgb(200, 200, 200);
-		System.Drawing.Color color2 = ((!isConnected || percent < 0.0) ? System.Drawing.Color.FromArgb(100, 100, 100) : (isCharging ? System.Drawing.Color.FromArgb(59, 130, 246) : ((percent <= (double)AppSettings.Current.LowBatteryThreshold) ? System.Drawing.Color.FromArgb(226, 75, 74) : ((!(percent <= 50.0)) ? System.Drawing.Color.FromArgb(29, 158, 117) : System.Drawing.Color.FromArgb(245, 166, 35)))));
-		Rectangle rect = new Rectangle(0, 3, 13, 10);
-		using (System.Drawing.Pen pen = new System.Drawing.Pen(color, 1.2f))
-		{
-			graphics.DrawRectangle(pen, rect);
-		}
-		using (SolidBrush brush = new SolidBrush(color))
-		{
-			graphics.FillRectangle(brush, 13, 6, 3, 4);
-		}
-		if (isConnected && percent >= 0.0)
-		{
-			int num = (int)(11.0 * Math.Clamp(percent, 0.0, 100.0) / 100.0);
-			if (num > 0)
-			{
-				Rectangle rect2 = new Rectangle(1, 4, num, 8);
-				using SolidBrush brush2 = new SolidBrush(color2);
-				graphics.FillRectangle(brush2, rect2);
-			}
-		}
-		if (isCharging && isConnected)
-		{
-			using System.Drawing.Pen pen2 = new System.Drawing.Pen(System.Drawing.Color.White, 1.5f);
-			graphics.DrawLine(pen2, 8, 3, 5, 8);
-			graphics.DrawLine(pen2, 5, 8, 9, 8);
-			graphics.DrawLine(pen2, 9, 8, 6, 13);
-		}
-		nint hicon = bitmap.GetHicon();
-		Icon result;
-		using (Icon tempIcon = System.Drawing.Icon.FromHandle(hicon))
-		{
-			result = (Icon)tempIcon.Clone();
-		}
-		DestroyIcon(hicon);
-		return result;
-	}
-
-	[DllImport("user32.dll")]
-	private static extern bool DestroyIcon(nint handle);
 
 	private void ApplyLanguage()
 	{
@@ -350,161 +605,154 @@ public partial class MainWindow : Window
 		CloseButton.ToolTip = Strings.Get("CloseTray");
 		FullModeButton.ToolTip = Strings.Get("NormalMode");
 		StatusText.Text = Strings.Get("Searching");
+		CompactModeBorder.ToolTip = Strings.Get("CompactTip");
+
 		if (TrayIcon != null)
 		{
 			TrayIcon.ToolTipText = "X-Charge";
 		}
-		if (ToggleWindowItem != null)
+
+		ToggleWindowItem.Header = (Visibility == Visibility.Visible && Opacity > 0.0) ? Strings.Get("Hide") : Strings.Get("Show");
+		ThemesMenuItem.Header = Strings.Get("Themes");
+		DarkThemeItem.Header = Strings.Get("ThemeDark");
+		LightThemeItem.Header = Strings.Get("ThemeLight");
+		TransparentThemeItem.Header = Strings.Get("ThemeTransparent");
+		LanguagesMenuItem.Header = Strings.Get("Language");
+		SoundsMenuItem.Header = Strings.Get("PlaySounds");
+		UsbSoundItem.Header = Strings.Get("SoundUsb");
+		BatterySoundItem.Header = Strings.Get("SoundBattery");
+		ThresholdMenuItem.Header = Strings.Get("BatteryOptions");
+		PollIntervalMenuItem.Header = Strings.Get("PollInterval");
+		Poll1sItem.Header = Strings.Get("Poll1s");
+		Poll2sItem.Header = Strings.Get("Poll2s");
+		Poll3sItem.Header = Strings.Get("Poll3s");
+		Poll5sItem.Header = Strings.Get("Poll5s");
+		GhostModeItem.Header = Strings.Get("GhostMode");
+		HotKeyItem.Header = Strings.Get("GlobalHotKey");
+		StartupItem.Header = Strings.Get("StartWindows");
+		StartInTrayItem.Header = Strings.Get("StartInTray");
+		HideUntilLowItem.Header = Strings.Get("HideUntilLow");
+		ExitItem.Header = Strings.Get("Exit");
+
+		UpdateControllerNames();
+	}
+
+	private void UpdateControllerNames()
+	{
+		string baseName = Strings.Get("TitleText");
+		for (int i = 0; i < Controllers.Count; i++)
 		{
-			ToggleWindowItem.Header = Strings.Get("Show");
-		}
-		if (ThemesMenuItem != null)
-		{
-			ThemesMenuItem.Header = Strings.Get("Themes");
-		}
-		if (SoundsMenuItem != null)
-		{
-			SoundsMenuItem.Header = Strings.Get("PlaySounds");
-		}
-		if (ThresholdMenuItem != null)
-		{
-			ThresholdMenuItem.Header = Strings.Get("BatteryOptions");
-		}
-		if (StartupItem != null)
-		{
-			StartupItem.Header = Strings.Get("StartWindows");
-		}
-		if (StartInTrayItem != null)
-		{
-			StartInTrayItem.Header = Strings.Get("StartInTray");
-		}
-		if (ExitItem != null)
-		{
-			ExitItem.Header = Strings.Get("Exit");
+			Controllers[i].Name = (Controllers.Count > 1)
+				? $"{baseName} {Controllers[i].XInputSlot + 1}"
+				: baseName;
 		}
 	}
 
-	private void AutoSyncWindowsTheme()
+	private void UpdateTrayIconAndTooltip(double percent, bool isOnExternalPower, bool isConnected, string statusText, string summaryOrName)
 	{
-		try
-		{
-			object? value = Registry.GetValue("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", 1);
-			int theme = ((value == null) ? 1 : ((int)value));
-			SetTheme(theme);
-		}
-		catch
-		{
-		}
-	}
+		if (TrayIcon == null) return;
 
-	private void UpdateTrayIconAndTooltip(double percent, bool isOnExternalPower, bool isConnected, string statusText, string controllerName)
-	{
-		if (TrayIcon != null)
+		Icon oldIcon = TrayIcon.Icon;
+		TrayIcon.Icon = TrayIconService.GenerateBatteryIcon(percent, isOnExternalPower, isConnected, AppSettings.Current.LowBatteryThreshold);
+		oldIcon?.Dispose();
+
+		string text;
+		if (!isConnected)
 		{
-			Icon icon = TrayIcon.Icon;
-			TrayIcon.Icon = GenerateBatteryIcon(percent, isOnExternalPower, isConnected);
-			icon?.Dispose();
-			string text;
-			if (!isConnected)
-			{
-				text = Strings.Get("Controller") + " - " + Strings.Get("NotConnected");
-			}
-			else if (percent >= 0.0)
-			{
-				int num = (int)Math.Round(percent / 100.0 * 40.0);
-				string value = string.Format(Strings.Get("HoursLeft"), num);
-				text = $"{controllerName} - {Math.Round(percent)}% {value} - {statusText}";
-			}
-			else
-			{
-				text = controllerName + " - " + Strings.Get("NoData");
-			}
-			TrayIcon.ToolTipText = ((text.Length > 63) ? text.Substring(0, 63) : text);
+			text = $"X-Charge: {Strings.Get("NotFound")}";
 		}
+		else if (Controllers.Count > 1)
+		{
+			text = $"X-Charge: {summaryOrName}";
+		}
+		else if (percent >= 0.0)
+		{
+			text = $"X-Charge: {summaryOrName} ({statusText})";
+		}
+		else
+		{
+			text = $"X-Charge: {summaryOrName} - {Strings.Get("NoData")}";
+		}
+
+		TrayIcon.ToolTipText = (text.Length > 63) ? text.Substring(0, 60) + "..." : text;
 	}
 
 	private void ShowWindow()
 	{
-		if (base.Visibility != 0)
+		_isHiding = false;
+
+		double targetOpacity = (CompactModeBorder.Visibility == Visibility.Visible)
+			? AppSettings.Current.CompactOpacity
+			: 1.0;
+
+		if (Visibility != Visibility.Visible)
 		{
-			base.Opacity = 0.0;
+			Opacity = 0.0;
 			Show();
 		}
-		base.WindowState = WindowState.Normal;
+		WindowState = WindowState.Normal;
 		Activate();
-		DoubleAnimation animation = new DoubleAnimation(1.0, TimeSpan.FromSeconds(0.2));
-		BeginAnimation(UIElement.OpacityProperty, animation);
+		Topmost = false;
+		Topmost = true;
+
+		ApplyClickThrough();
+
+		DoubleAnimation animation = new(targetOpacity, TimeSpan.FromSeconds(0.2));
+		animation.Completed += (s, e) =>
+		{
+			if (!_isHiding)
+			{
+				BeginAnimation(OpacityProperty, null);
+				Opacity = targetOpacity;
+			}
+		};
+		BeginAnimation(OpacityProperty, animation);
+
+		if (!_burnInTimer.IsEnabled)
+		{
+			_burnInTimer.Start();
+		}
+
+		if (ToggleWindowItem != null)
+		{
+			ToggleWindowItem.Header = Strings.Get("Hide");
+		}
 	}
 
 	private void HideWindow()
 	{
-		if (base.Visibility != Visibility.Visible)
+		if (Visibility != Visibility.Visible || _isHiding) return;
+
+		_isHiding = true;
+		_burnInTimer.Stop();
+		_ghostBypassTimer?.Stop();
+
+		DoubleAnimation animation = new(0.0, TimeSpan.FromSeconds(0.2));
+		animation.Completed += (s, e) =>
 		{
-			return;
-		}
-		DoubleAnimation doubleAnimation = new DoubleAnimation(0.0, TimeSpan.FromSeconds(0.2));
-		doubleAnimation.Completed += delegate
-		{
-			if (!_isExiting)
+			if (_isHiding && !_isExiting)
 			{
 				Hide();
+				BeginAnimation(OpacityProperty, null);
 			}
 		};
-		BeginAnimation(UIElement.OpacityProperty, doubleAnimation);
+		BeginAnimation(OpacityProperty, animation);
+
+		if (ToggleWindowItem != null)
+		{
+			ToggleWindowItem.Header = Strings.Get("Show");
+		}
 	}
 
 	private void ToggleWindow()
 	{
-		if (base.Visibility == Visibility.Visible && base.Opacity > 0.0)
+		if (Visibility == Visibility.Visible && Opacity > 0.0 && !_isHiding)
 		{
 			HideWindow();
-			if (ToggleWindowItem != null)
-			{
-				ToggleWindowItem.Header = Strings.Get("Show");
-			}
 		}
 		else
 		{
 			ShowWindow();
-			if (ToggleWindowItem != null)
-			{
-				ToggleWindowItem.Header = Strings.Get("Hide");
-			}
-		}
-	}
-
-	private bool IsStartupEnabled()
-	{
-		try
-		{
-			using RegistryKey? registryKey = Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Run", writable: false);
-			return (registryKey?.GetValue("X-Charge") != null) || (registryKey?.GetValue("XboxBatteryMonitor") != null);
-		}
-		catch
-		{
-			return false;
-		}
-	}
-
-	private void ToggleStartup(bool enable)
-	{
-		try
-		{
-			using RegistryKey? registryKey = Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Run", writable: true);
-			if (registryKey != null)
-			{
-				registryKey.DeleteValue("XboxBatteryMonitor", throwOnMissingValue: false);
-				if (!enable)
-				{
-					registryKey.DeleteValue("X-Charge", throwOnMissingValue: false);
-					return;
-				}
-				string exePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "X-Charge.exe");
-				registryKey.SetValue("X-Charge", $"\"{exePath}\"");
-			}
-		}
-		catch
-		{
 		}
 	}
 
@@ -512,199 +760,76 @@ public partial class MainWindow : Window
 	{
 		_isExiting = true;
 		_timer.Stop();
-		_burnInTimer?.Stop();
-		if (_userPreferenceChangedHandler != null)
-		{
-			SystemEvents.UserPreferenceChanged -= _userPreferenceChangedHandler;
-			_userPreferenceChangedHandler = null;
-		}
-		DispatcherTimer? flashTimer = _flashTimer;
-		if (flashTimer != null)
-		{
-			flashTimer.Stop();
-		}
-		try
-		{
-			_alertMediaPlayer?.Close();
-			_alertMediaPlayer = null;
-		}
-		catch
-		{
-		}
+		_burnInTimer.Stop();
+		_saveSettingsTimer?.Stop();
+
+		SaveCurrentState();
+
+		_flashTimer?.Stop();
+		_ghostBypassTimer?.Stop();
+		_soundCts?.Cancel();
+		SoundService.StopAlert();
+		SoundService.Dispose();
+		_hotKeyService.Dispose();
+
 		if (TrayIcon != null)
 		{
-			((UIElement)(object)TrayIcon).Visibility = Visibility.Collapsed;
+			TrayIcon.Visibility = Visibility.Collapsed;
 			TrayIcon.Dispose();
 		}
+
 		Application.Current.Shutdown();
-	}
-	private void PlayConnectSound()
-	{
-		if (!AppSettings.Current.SoundUsbEnabled)
-		{
-			return;
-		}
-		try
-		{
-			PlaySound("DeviceConnect", IntPtr.Zero, 2162689u);
-		}
-		catch
-		{
-		}
-	}
-
-	private void PlayDisconnectSound()
-	{
-		if (!AppSettings.Current.SoundUsbEnabled)
-		{
-			return;
-		}
-		try
-		{
-			PlaySound("DeviceDisconnect", IntPtr.Zero, 2162689u);
-		}
-		catch
-		{
-		}
-	}
-
-	
-	[StructLayout(LayoutKind.Sequential)]
-	private struct XINPUT_STATE
-	{
-		public uint dwPacketNumber;
-		public ushort wButtons;
-		public byte bLeftTrigger;
-		public byte bRightTrigger;
-		public short sThumbLX;
-		public short sThumbLY;
-		public short sThumbRX;
-		public short sThumbRY;
-	}
-
-	[StructLayout(LayoutKind.Sequential)]
-	private struct XINPUT_BATTERY_INFORMATION
-	{
-		public byte BatteryType;
-		public byte BatteryLevel;
-	}
-
-	[DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
-	private static extern uint XInputGetState14(uint dwUserIndex, out XINPUT_STATE pState);
-
-	[DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")]
-	private static extern uint XInputGetState910(uint dwUserIndex, out XINPUT_STATE pState);
-
-	[DllImport("xinput1_4.dll", EntryPoint = "XInputGetBatteryInformation")]
-	private static extern uint XInputGetBatteryInformation14(uint dwUserIndex, byte devType, out XINPUT_BATTERY_INFORMATION pBatteryInformation);
-
-	[DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetBatteryInformation")]
-	private static extern uint XInputGetBatteryInformation910(uint dwUserIndex, byte devType, out XINPUT_BATTERY_INFORMATION pBatteryInformation);
-
-	private static bool TryGetXInputBattery(uint userIndex, out byte batteryType, out byte batteryLevel)
-	{
-		try
-		{
-			uint resState = XInputGetState14(userIndex, out _);
-			if (resState == 0)
-			{
-				uint res = XInputGetBatteryInformation14(userIndex, 0, out var info);
-				if (res == 0 && info.BatteryType != 0) // 0 = BATTERY_TYPE_DISCONNECTED
-				{
-					batteryType = info.BatteryType;
-					batteryLevel = info.BatteryLevel;
-					return true;
-				}
-			}
-		}
-		catch
-		{
-			try
-			{
-				uint resState = XInputGetState910(userIndex, out _);
-				if (resState == 0)
-				{
-					uint res = XInputGetBatteryInformation910(userIndex, 0, out var info);
-					if (res == 0 && info.BatteryType != 0)
-					{
-						batteryType = info.BatteryType;
-						batteryLevel = info.BatteryLevel;
-						return true;
-					}
-				}
-			}
-			catch { }
-		}
-		batteryType = 0;
-		batteryLevel = 0;
-		return false;
 	}
 
 	private void UpdateBatteryStatus()
 	{
-		SolidColorBrush solidColorBrush = new SolidColorBrush((AppSettings.Current.ThemeIndex == 1) ? System.Windows.Media.Color.FromRgb(30, 30, 30) : System.Windows.Media.Color.FromRgb(byte.MaxValue, byte.MaxValue, byte.MaxValue));
+		SolidColorBrush defaultTextBrush = new((AppSettings.Current.ThemeIndex == 1)
+			? System.Windows.Media.Color.FromRgb(30, 30, 30)
+			: System.Windows.Media.Color.FromRgb(255, 255, 255));
+		defaultTextBrush.Freeze();
 
-		// 1. Escaneo nativo y directo de ranuras XInput (0 a 3).
-		// XInput es la API oficial y 100% estable de Microsoft para mandos Xbox (Receptor USB Inalámbrico, Cable y Bluetooth).
-		// No genera interferencia por radiofrecuencia (RF) ni causa apagados por comandos I/O incompatibles.
-		List<int> activeXInputSlots = new List<int>();
-		for (uint slot = 0; slot < 4; slot++)
-		{
-			uint s = 1167; // ERROR_DEVICE_NOT_CONNECTED
-			try
-			{
-				s = XInputGetState14(slot, out _);
-			}
-			catch
-			{
-				try
-				{
-					s = XInputGetState910(slot, out _);
-				}
-				catch { }
-			}
+		List<int> activeSlots = XInputService.GetConnectedSlots();
+		bool controllerListChanged = false;
 
-			if (s == 0)
-			{
-				activeXInputSlots.Add((int)slot);
-			}
-		}
-
-		// 2. Sincronización inmediata de mandos desconectados:
-		// Al apagarse el mando, su slot XInput deja de responder y se elimina al instante.
+		// Sincronizar desconexiones de mandos
 		foreach (ControllerInfo item in Controllers.ToList())
 		{
-			if (item.XInputSlot < 0 || !activeXInputSlots.Contains(item.XInputSlot))
+			if (item.XInputSlot < 0 || !activeSlots.Contains(item.XInputSlot))
 			{
 				Controllers.Remove(item);
+				controllerListChanged = true;
 			}
 		}
 
-		// 3. Registrar o actualizar mandos XInput activos
-		foreach (int slot in activeXInputSlots)
+		// Registrar o actualizar mandos XInput activos
+		foreach (int slot in activeSlots)
 		{
 			ControllerInfo? ctrl = Controllers.FirstOrDefault(c => c.XInputSlot == slot);
 			if (ctrl == null)
 			{
 				ctrl = new ControllerInfo
 				{
-					Id = $"XInput_{slot}",
 					XInputSlot = slot,
-					Name = Strings.Get("TitleText") + (activeXInputSlots.Count > 1 ? $" {slot + 1}" : ""),
-					ConnectedTimestamp = DateTime.UtcNow,
+					Name = Strings.Get("TitleText"),
 					StatusText = Strings.Get("Searching"),
 					Percent = -1.0
 				};
 				Controllers.Add(ctrl);
+				controllerListChanged = true;
 			}
+		}
+
+		if (controllerListChanged)
+		{
+			UpdateControllerNames();
 		}
 
 		bool hasAnyLowBattery = false;
 		double lowestPercent = double.MaxValue;
 		string lowestText = "--%";
-		SolidColorBrush lowestBrush = solidColorBrush;
+		SolidColorBrush lowestBrush = defaultTextBrush;
 		string allSummaries = "";
-		bool anyCharging = false;
+		bool anyExternalPower = false;
 
 		if (Controllers.Count == 0)
 		{
@@ -712,8 +837,9 @@ public partial class MainWindow : Window
 			StatusText.Text = Strings.Get("NotFound");
 			StatusText.Visibility = Visibility.Visible;
 			CompactPercentText.Text = "--%";
-			CompactPercentText.Foreground = solidColorBrush;
+			CompactPercentText.Foreground = defaultTextBrush;
 			UpdateTrayIconAndTooltip(-1.0, isOnExternalPower: false, isConnected: false, "", Strings.Get("Controller"));
+
 			if (AppSettings.Current.HideUntilLowBattery)
 			{
 				HideWindow();
@@ -727,35 +853,38 @@ public partial class MainWindow : Window
 		{
 			string ctrlName = controllerInfo.Name;
 			double displayPercent = -1.0;
-			bool isCharging = false;
 			bool isOnExternalPower = false;
-			string statusLabel = "";
+			string statusLabel;
 			System.Windows.Media.Color statusColor;
 
-			if (TryGetXInputBattery((uint)controllerInfo.XInputSlot, out byte xType, out byte xLevel))
+			if (XInputService.TryGetBattery(controllerInfo.XInputSlot, out byte xType, out byte xLevel))
 			{
-				if (xType == 1) // BATTERY_TYPE_WIRED
+				if (xType == XInputService.BATTERY_TYPE_WIRED)
 				{
 					isOnExternalPower = true;
 					displayPercent = 100.0;
-					isCharging = false;
 					statusLabel = Strings.Get("UsbCharged");
 					statusColor = System.Windows.Media.Color.FromRgb(59, 130, 246);
 				}
-				else // BATTERY_TYPE_ALKALINE (2), NIMH (3) o UNKNOWN (255)
+				else if (xType == XInputService.BATTERY_TYPE_UNKNOWN)
 				{
 					isOnExternalPower = false;
-					isCharging = false;
+					displayPercent = -1.0;
+					statusLabel = Strings.Get("NoData");
+					statusColor = System.Windows.Media.Color.FromRgb(150, 150, 150);
+				}
+				else
+				{
+					isOnExternalPower = false;
 					displayPercent = xLevel switch
 					{
-						3 => 100.0,
-						2 => 70.0,
-						1 => 35.0,
+						XInputService.BATTERY_LEVEL_FULL => 100.0,
+						XInputService.BATTERY_LEVEL_MEDIUM => 70.0,
+						XInputService.BATTERY_LEVEL_LOW => 35.0,
 						_ => 15.0
 					};
-					controllerInfo.LastWirelessPercent = displayPercent;
 					statusLabel = Strings.Get("NotCharged");
-					statusColor = (displayPercent <= (double)AppSettings.Current.LowBatteryThreshold)
+					statusColor = (displayPercent <= AppSettings.Current.LowBatteryThreshold)
 						? System.Windows.Media.Color.FromRgb(226, 75, 74)
 						: ((displayPercent <= 50.0) ? System.Windows.Media.Color.FromRgb(245, 166, 35) : System.Windows.Media.Color.FromRgb(29, 158, 117));
 				}
@@ -766,62 +895,87 @@ public partial class MainWindow : Window
 				continue;
 			}
 
-			// Actualizar sonido de conexión / desconexión USB
+			// Notificaciones de sonido al conectar/desconectar USB
 			if (isOnExternalPower && !controllerInfo.WasOnExternalPower)
 			{
-				PlayConnectSound();
+				if (controllerInfo.HasCheckedExternalPowerOnce)
+				{
+					SoundService.PlayConnectSound();
+				}
+				// Si estaba sonando la alarma de batería baja, cancelarla y silenciarla de inmediato
+				_soundCts?.Cancel();
+				SoundService.StopAlert();
+
+				// Detener parpadeo visual de alarma y restaurar fondo original
+				if (_flashTimer != null && _flashTimer.IsEnabled)
+				{
+					_flashTimer.Stop();
+					FullModeBorder.Background = _originalBackground;
+					CompactModeBorder.Background = _originalBackground;
+				}
 			}
 			else if (!isOnExternalPower && controllerInfo.WasOnExternalPower)
 			{
-				PlayDisconnectSound();
+				if (controllerInfo.HasCheckedExternalPowerOnce)
+				{
+					SoundService.PlayDisconnectSound();
+				}
 			}
 			controllerInfo.WasOnExternalPower = isOnExternalPower;
+			controllerInfo.HasCheckedExternalPowerOnce = true;
 
-			// Actualizar propiedades reactivas del mando
+			// Actualizar propiedades reactivas
 			controllerInfo.Percent = displayPercent;
 			controllerInfo.StatusText = statusLabel;
-			controllerInfo.BatteryColor = new SolidColorBrush(statusColor);
-			controllerInfo.IsCharging = isCharging;
+			SolidColorBrush statusBrush = new(statusColor);
+			statusBrush.Freeze();
+			controllerInfo.BatteryColor = statusBrush;
+			controllerInfo.IsCharging = isOnExternalPower;
 
-			// Calcular mando más crítico para modo compacto y System Tray
+			// Controller más crítico para modo compacto y tray
 			if (displayPercent >= 0.0 && displayPercent <= lowestPercent)
 			{
 				lowestPercent = displayPercent;
 				lowestText = $"{Math.Round(displayPercent)}%";
-				lowestBrush = new SolidColorBrush(statusColor);
+				lowestBrush = statusBrush;
 			}
 
-			anyCharging |= isCharging;
+			anyExternalPower |= isOnExternalPower;
 			allSummaries += $"{ctrlName}: {Math.Round(displayPercent)}% | ";
 
-			// Alerta de batería baja
-			if (displayPercent >= 0.0 && displayPercent <= (double)AppSettings.Current.LowBatteryThreshold && !isOnExternalPower)
+			// Alerta de batería baja (con prevención de spam ante desconexiones momentáneas)
+			if (displayPercent >= 0.0 && displayPercent <= AppSettings.Current.LowBatteryThreshold && !isOnExternalPower)
 			{
 				hasAnyLowBattery = true;
 				if (!controllerInfo.LowBatteryWarned)
 				{
-					new ToastContentBuilder()
-						.AddText(Strings.Get("LowBattery"))
-						.AddText(string.Format(Strings.Get("ControllerHas"), ctrlName, Math.Round(displayPercent)))
-						.Show();
+					try
+					{
+						new ToastContentBuilder()
+							.AddText(Strings.Get("LowBattery"))
+							.AddText(string.Format(Strings.Get("ControllerHas"), ctrlName, Math.Round(displayPercent)))
+							.Show();
+					}
+					catch { }
+
 					StartFlashAlert();
+					_soundCts?.Cancel();
+					_soundCts = new CancellationTokenSource();
+					_ = SoundService.PlayLowBatteryAlertAsync(_soundCts.Token);
+
 					controllerInfo.LowBatteryWarned = true;
 				}
 			}
-			else
+			else if (displayPercent > AppSettings.Current.LowBatteryThreshold || isOnExternalPower)
 			{
+				// Solo restablecer la advertencia si la batería realmente subió o se conectó por cable
 				controllerInfo.LowBatteryWarned = false;
 			}
 		}
 
-		if (Controllers.Count == 1)
-		{
-			TitleText.Text = Controllers[0].Name;
-		}
-		else
-		{
-			TitleText.Text = $"{Strings.Get("Controllers")} ({Controllers.Count})";
-		}
+		TitleText.Text = (Controllers.Count == 1)
+			? Controllers[0].Name
+			: $"{Strings.Get("Controllers")} ({Controllers.Count})";
 
 		CompactPercentText.Text = lowestText;
 		CompactPercentText.Foreground = lowestBrush;
@@ -831,8 +985,12 @@ public partial class MainWindow : Window
 			allSummaries = allSummaries.Substring(0, allSummaries.Length - 3);
 		}
 
+		CompactModeBorder.ToolTip = (!string.IsNullOrWhiteSpace(allSummaries))
+			? $"{allSummaries} | {Strings.Get("CompactTip")}"
+			: Strings.Get("CompactTip");
+
 		double trayPercent = (lowestPercent != double.MaxValue) ? lowestPercent : -1.0;
-		UpdateTrayIconAndTooltip(trayPercent, anyCharging, isConnected: true, anyCharging ? Strings.Get("Charging") : Strings.Get("Charged"), allSummaries);
+		UpdateTrayIconAndTooltip(trayPercent, anyExternalPower, isConnected: true, anyExternalPower ? Strings.Get("UsbCharged") : Strings.Get("Charged"), allSummaries);
 
 		if (AppSettings.Current.HideUntilLowBattery)
 		{
@@ -847,15 +1005,14 @@ public partial class MainWindow : Window
 		}
 	}
 
-	private async void StartFlashAlert()
+	private void StartFlashAlert()
 	{
-		if (_flashTimer != null && _flashTimer.IsEnabled)
-		{
-			return;
-		}
+		if (_flashTimer != null && _flashTimer.IsEnabled) return;
+
 		_flashRemaining = AppSettings.Current.FlashCount * 2;
 		_flashColorIndex = 0;
 		ShowWindow();
+
 		if (_flashTimer == null)
 		{
 			_flashTimer = new DispatcherTimer
@@ -865,68 +1022,21 @@ public partial class MainWindow : Window
 			_flashTimer.Tick += FlashTick;
 		}
 		_flashTimer.Start();
-		if (!AppSettings.Current.SoundBatteryEnabled)
-		{
-			return;
-		}
-		try
-		{
-			string winMedia = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "Windows Notify System Generic.wav");
-			if (!File.Exists(winMedia))
-			{
-				winMedia = @"C:\Windows\Media\Windows Notify System Generic.wav";
-			}
-			if (File.Exists(winMedia))
-			{
-				Uri uri = new Uri(winMedia, UriKind.Absolute);
-				if (_alertMediaPlayer == null)
-				{
-					_alertMediaPlayer = new MediaPlayer();
-				}
-				_alertMediaPlayer.Open(uri);
-				for (int round = 0; round < 3; round++)
-				{
-					for (int i = 0; i < 3; i++)
-					{
-						if (!AppSettings.Current.SoundBatteryEnabled || _isExiting)
-						{
-							_alertMediaPlayer.Stop();
-							return;
-						}
-						_alertMediaPlayer.Position = TimeSpan.Zero;
-						_alertMediaPlayer.Volume = 0.05 + (double)i * 0.1;
-						_alertMediaPlayer.Play();
-						await Task.Delay(500);
-					}
-					if (round < 2)
-					{
-						await Task.Delay(2000);
-					}
-				}
-			}
-		}
-		catch
-		{
-		}
 	}
 
 	private void FlashTick(object? sender, EventArgs e)
 	{
 		if (_flashRemaining <= 0)
 		{
-			DispatcherTimer? flashTimer = _flashTimer;
-			if (flashTimer != null)
-			{
-				flashTimer.Stop();
-			}
+			_flashTimer?.Stop();
 			FullModeBorder.Background = _originalBackground;
 			CompactModeBorder.Background = _originalBackground;
 			return;
 		}
+
 		if (_flashRemaining % 2 == 0)
 		{
-			System.Windows.Media.Color color = FlashColors[_flashColorIndex % FlashColors.Length];
-			SolidColorBrush background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(230, color.R, color.G, color.B));
+			SolidColorBrush background = FlashBrushes[_flashColorIndex % FlashBrushes.Length];
 			FullModeBorder.Background = background;
 			CompactModeBorder.Background = background;
 			_flashColorIndex++;
@@ -941,28 +1051,23 @@ public partial class MainWindow : Window
 
 	private void CompactMode_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
 	{
-		if (CompactModeBorder.Visibility != Visibility.Visible)
-		{
-			return;
-		}
+		if (CompactModeBorder.Visibility != Visibility.Visible) return;
 
 		e.Handled = true;
 
-		// Rueda hacia arriba (e.Delta > 0) -> Más nítido (incrementa opacidad hasta 1.0)
-		// Rueda hacia abajo (e.Delta < 0) -> Más transparente (reduce opacidad hasta 0.15)
 		double step = (e.Delta > 0) ? 0.05 : -0.05;
 		double newOpacity = Math.Clamp(Math.Round(AppSettings.Current.CompactOpacity + step, 2), 0.15, 1.0);
 
 		AppSettings.Current.CompactOpacity = newOpacity;
-		AppSettings.Current.Save();
+		RequestSaveSettings(); // Debounced: evita escrituras síncronas masivas a disco
 
 		ApplyCompactOpacity(newOpacity, showMeter: true);
 	}
 
 	private void ApplyCompactOpacity(double opacity, bool showMeter = false)
 	{
-		BeginAnimation(UIElement.OpacityProperty, null);
-		base.Opacity = opacity;
+		BeginAnimation(OpacityProperty, null);
+		Opacity = opacity;
 
 		if (showMeter && CompactModeBorder.Visibility == Visibility.Visible)
 		{
@@ -979,7 +1084,7 @@ public partial class MainWindow : Window
 				{
 					Interval = TimeSpan.FromMilliseconds(1200)
 				};
-				_opacityMeterTimer.Tick += delegate
+				_opacityMeterTimer.Tick += (s, e) =>
 				{
 					_opacityMeterTimer?.Stop();
 					OpacityMeterOverlay.Visibility = Visibility.Collapsed;
@@ -991,60 +1096,89 @@ public partial class MainWindow : Window
 		}
 	}
 
-	private void StartBreathingOpacity()
+	private void SwitchToCompactMode()
 	{
-		if (CompactModeBorder.Visibility == Visibility.Visible)
+		FullModeBorder.Visibility = Visibility.Collapsed;
+		CompactModeBorder.Visibility = Visibility.Visible;
+		SizeToContent = SizeToContent.Manual;
+		Width = _compactSize;
+		Height = _compactSize;
+		CompactPercentText.FontSize = _compactSize * 0.3;
+		_anchorLeft = Left;
+		_anchorTop = Top;
+		_orbitAngle = 0.0;
+
+		if (TextShiftTransform != null)
 		{
-			ApplyCompactOpacity(AppSettings.Current.CompactOpacity, showMeter: false);
+			TextShiftTransform.BeginAnimation(TranslateTransform.XProperty, null);
+			TextShiftTransform.BeginAnimation(TranslateTransform.YProperty, null);
+			TextShiftTransform.X = 0;
+			TextShiftTransform.Y = 0;
 		}
+
+		ApplyCompactOpacity(AppSettings.Current.CompactOpacity, showMeter: false);
+		TriggerShineAnimation();
+		ApplyClickThrough();
+	}
+
+	private void SwitchToFullMode()
+	{
+		FullModeBorder.Visibility = Visibility.Visible;
+		CompactModeBorder.Visibility = Visibility.Collapsed;
+		SizeToContent = SizeToContent.Height;
+		Width = 260.0;
+		BeginAnimation(OpacityProperty, null);
+		Opacity = 1.0;
+		_anchorLeft = double.NaN;
+		_anchorTop = double.NaN;
+		BeginAnimation(LeftProperty, null);
+		BeginAnimation(TopProperty, null);
+
+		// Clampeo al área de trabajo para evitar que el ensanchamiento a 260px desborde la pantalla
+		ClampWindowToCurrentMonitor();
+
+		if (TextShiftTransform != null)
+		{
+			TextShiftTransform.BeginAnimation(TranslateTransform.XProperty, null);
+			TextShiftTransform.BeginAnimation(TranslateTransform.YProperty, null);
+			TextShiftTransform.X = 0;
+			TextShiftTransform.Y = 0;
+		}
+
+		ApplyClickThrough();
 	}
 
 	private void ToggleMode_Click(object sender, RoutedEventArgs e)
 	{
 		if (FullModeBorder.Visibility == Visibility.Visible)
 		{
-			FullModeBorder.Visibility = Visibility.Collapsed;
-			CompactModeBorder.Visibility = Visibility.Visible;
-			base.SizeToContent = SizeToContent.Manual;
-			base.Width = _compactSize;
-			base.Height = _compactSize;
-			CompactPercentText.FontSize = _compactSize * 0.3;
-			_anchorLeft = base.Left;
-			_anchorTop = base.Top;
-			_orbitAngle = 0.0;
-			ApplyCompactOpacity(AppSettings.Current.CompactOpacity, showMeter: false);
-			TriggerShineAnimation();
+			SwitchToCompactMode();
+			AppSettings.Current.IsCompactMode = true;
 		}
 		else
 		{
-			FullModeBorder.Visibility = Visibility.Visible;
-			CompactModeBorder.Visibility = Visibility.Collapsed;
-			base.SizeToContent = SizeToContent.Height;
-			base.Width = 260.0;
-			BeginAnimation(UIElement.OpacityProperty, null);
-			base.Opacity = 1.0;
-			_anchorLeft = double.NaN;
-			_anchorTop = double.NaN;
-			BeginAnimation(Window.LeftProperty, null);
-			BeginAnimation(Window.TopProperty, null);
-			if (TextShiftTransform != null)
-			{
-				TextShiftTransform.BeginAnimation(TranslateTransform.XProperty, null);
-				TextShiftTransform.BeginAnimation(TranslateTransform.YProperty, null);
-				TextShiftTransform.X = 0;
-				TextShiftTransform.Y = 0;
-			}
+			SwitchToFullMode();
+			AppSettings.Current.IsCompactMode = false;
 		}
+		RequestSaveSettings();
 	}
 
 	private void ResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
 	{
 		if (CompactModeBorder.Visibility == Visibility.Visible)
 		{
-			double num = Math.Max(e.HorizontalChange, e.VerticalChange);
-			double val = Math.Max(60.0, base.Width + num);
-			val = (_compactSize = (base.Height = (base.Width = Math.Min(300.0, val))));
+			double delta = Math.Max(e.HorizontalChange, e.VerticalChange);
+			double val = Math.Max(60.0, Width + delta);
+			val = Math.Min(300.0, val);
+			_compactSize = val;
+			Width = val;
+			Height = val;
 			CompactPercentText.FontSize = val * 0.3;
+
+			ClampWindowToCurrentMonitor();
+
+			AppSettings.Current.CompactSize = _compactSize;
+			RequestSaveSettings();
 		}
 	}
 
@@ -1058,53 +1192,35 @@ public partial class MainWindow : Window
 		HideWindow();
 	}
 
-	private void CompactMode_MouseDown(object sender, MouseButtonEventArgs e)
-	{
-		if (e.ClickCount == 2)
-		{
-			BurnInTimer_Tick(null, EventArgs.Empty);
-		}
-	}
-
-	private void TestShineButton_Click(object sender, RoutedEventArgs e)
-	{
-		BurnInTimer_Tick(null, EventArgs.Empty);
-	}
-
 	private void TriggerShineAnimation()
 	{
 		try
 		{
 			if (ShineTransform != null)
 			{
-				double fromValue = (0.0 - base.Width) * 1.5;
-				double toValue = base.Width * 2.0;
-				DoubleAnimation animation = new DoubleAnimation(fromValue, toValue, TimeSpan.FromSeconds(1.3))
+				double fromValue = (0.0 - Width) * 1.5;
+				double toValue = Width * 2.0;
+				DoubleAnimation animation = new(fromValue, toValue, TimeSpan.FromSeconds(1.3))
 				{
-					EasingFunction = new CubicEase
-					{
-						EasingMode = EasingMode.EaseInOut
-					}
+					EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
 				};
 				ShineTransform.BeginAnimation(TranslateTransform.XProperty, animation);
 			}
 		}
-		catch
-		{
-		}
+		catch { }
 	}
 
 	private void BurnInTimer_Tick(object? sender, EventArgs e)
 	{
-		if (CompactModeBorder.Visibility == Visibility.Visible && base.IsVisible)
+		if (CompactModeBorder.Visibility == Visibility.Visible && IsVisible && !_isHiding)
 		{
-			if (double.IsNaN(_anchorLeft))
+			if (double.IsNaN(_anchorLeft) || double.IsNaN(_anchorTop))
 			{
-				_anchorLeft = base.Left;
-				_anchorTop = base.Top;
+				_anchorLeft = Left;
+				_anchorTop = Top;
 			}
 
-			// Órbita circular suave (R = 8px)
+			// Órbita circular armónica (R = 8px)
 			_orbitAngle += Math.PI / 4.0;
 			if (_orbitAngle >= Math.PI * 2.0)
 			{
@@ -1115,26 +1231,21 @@ public partial class MainWindow : Window
 			double offsetX = Math.Round(radius * Math.Cos(_orbitAngle), 2);
 			double offsetY = Math.Round(radius * Math.Sin(_orbitAngle), 2);
 
-			Rect workArea = SystemParameters.WorkArea;
-			double toLeft = Math.Clamp(_anchorLeft + offsetX, workArea.Left, workArea.Right - base.Width);
-			double toTop = Math.Clamp(_anchorTop + offsetY, workArea.Top, workArea.Bottom - base.Height);
+			// Resolver el monitor real donde reside la ventana (soporte multi-monitor)
+			Rect workArea = WindowStyleService.GetCurrentMonitorWorkArea(this);
+			double toLeft = Math.Clamp(_anchorLeft + offsetX, workArea.Left, Math.Max(workArea.Left, workArea.Right - Width));
+			double toTop = Math.Clamp(_anchorTop + offsetY, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - Height));
 
-			DoubleAnimation animLeft = new DoubleAnimation(toLeft, TimeSpan.FromSeconds(7.0))
+			DoubleAnimation animLeft = new(toLeft, TimeSpan.FromSeconds(7.0))
 			{
-				EasingFunction = new QuadraticEase
-				{
-					EasingMode = EasingMode.EaseInOut
-				}
+				EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
 			};
-			DoubleAnimation animTop = new DoubleAnimation(toTop, TimeSpan.FromSeconds(7.0))
+			DoubleAnimation animTop = new(toTop, TimeSpan.FromSeconds(7.0))
 			{
-				EasingFunction = new QuadraticEase
-				{
-					EasingMode = EasingMode.EaseInOut
-				}
+				EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
 			};
-			BeginAnimation(Window.LeftProperty, animLeft);
-			BeginAnimation(Window.TopProperty, animTop);
+			BeginAnimation(LeftProperty, animLeft);
+			BeginAnimation(TopProperty, animTop);
 
 			try
 			{
@@ -1143,36 +1254,26 @@ public partial class MainWindow : Window
 					// Micro-desplazamiento de texto (+- 1.0px) para mitigar quemado de subpíxeles
 					double textX = Math.Round(1.0 * Math.Cos(_orbitAngle * 3.0), 2);
 					double textY = Math.Round(1.0 * Math.Sin(_orbitAngle * 3.0), 2);
-					DoubleAnimation animTextX = new DoubleAnimation(textX, TimeSpan.FromSeconds(4.0))
+					DoubleAnimation animTextX = new(textX, TimeSpan.FromSeconds(4.0))
 					{
-						EasingFunction = new QuadraticEase
-						{
-							EasingMode = EasingMode.EaseInOut
-						}
+						EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
 					};
-					DoubleAnimation animTextY = new DoubleAnimation(textY, TimeSpan.FromSeconds(4.0))
+					DoubleAnimation animTextY = new(textY, TimeSpan.FromSeconds(4.0))
 					{
-						EasingFunction = new QuadraticEase
-						{
-							EasingMode = EasingMode.EaseInOut
-						}
+						EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
 					};
 					TextShiftTransform.BeginAnimation(TranslateTransform.XProperty, animTextX);
 					TextShiftTransform.BeginAnimation(TranslateTransform.YProperty, animTextY);
 				}
 			}
-			catch
-			{
-			}
-
-			TriggerShineAnimation();
+			catch { }
 		}
 		else
 		{
 			_anchorLeft = double.NaN;
 			_anchorTop = double.NaN;
-			BeginAnimation(Window.LeftProperty, null);
-			BeginAnimation(Window.TopProperty, null);
+			BeginAnimation(LeftProperty, null);
+			BeginAnimation(TopProperty, null);
 		}
 	}
 
@@ -1180,11 +1281,26 @@ public partial class MainWindow : Window
 	{
 		if (e.ButtonState == MouseButtonState.Pressed)
 		{
-			BeginAnimation(Window.LeftProperty, null);
-			BeginAnimation(Window.TopProperty, null);
-			DragMove();
-			_anchorLeft = base.Left;
-			_anchorTop = base.Top;
+			BeginAnimation(LeftProperty, null);
+			BeginAnimation(TopProperty, null);
+			double startLeft = Left;
+			double startTop = Top;
+			try
+			{
+				DragMove();
+			}
+			catch (InvalidOperationException) { }
+
+			// Solo actualizar y persistir el ancla si el usuario realmente arrastró la ventana
+			if (Math.Abs(Left - startLeft) > 1.0 || Math.Abs(Top - startTop) > 1.0)
+			{
+				_anchorLeft = Left;
+				_anchorTop = Top;
+				_orbitAngle = 0.0;
+				AppSettings.Current.WindowLeft = Left;
+				AppSettings.Current.WindowTop = Top;
+				RequestSaveSettings();
+			}
 		}
 	}
 
@@ -1192,29 +1308,29 @@ public partial class MainWindow : Window
 	{
 		if (CompactModeBorder.Visibility == Visibility.Visible)
 		{
-			BeginAnimation(UIElement.OpacityProperty, null);
-			base.Opacity = AppSettings.Current.CompactOpacity;
+			// Si la alarma de batería baja está activa, asegurar que permanezca en opacidad sólida 1.0
+			if (Controllers.Any(c => c.Percent >= 0.0 && c.Percent <= AppSettings.Current.LowBatteryThreshold && !c.IsCharging))
+			{
+				BeginAnimation(OpacityProperty, null);
+				Opacity = 1.0;
+			}
 		}
 	}
 
 	private void Window_MouseLeave(object sender, MouseEventArgs e)
 	{
-		if (CompactModeBorder.Visibility != Visibility.Visible)
-		{
-			return; // En modo normal nunca se atenúa
-		}
+		if (CompactModeBorder.Visibility != Visibility.Visible) return;
 
-		if (Controllers.Any((ControllerInfo c) => c.Percent <= (double)AppSettings.Current.LowBatteryThreshold && !c.IsCharging))
+		if (Controllers.Any(c => c.Percent >= 0.0 && c.Percent <= AppSettings.Current.LowBatteryThreshold && !c.IsCharging))
 		{
-			BeginAnimation(UIElement.OpacityProperty, null);
-			DoubleAnimation animation = new DoubleAnimation(1.0, TimeSpan.FromSeconds(0.2));
-			BeginAnimation(UIElement.OpacityProperty, animation);
+			BeginAnimation(OpacityProperty, null);
+			DoubleAnimation animation = new(1.0, TimeSpan.FromSeconds(0.2));
+			BeginAnimation(OpacityProperty, animation);
 		}
 		else
 		{
-			BeginAnimation(UIElement.OpacityProperty, null);
-			base.Opacity = AppSettings.Current.CompactOpacity;
+			BeginAnimation(OpacityProperty, null);
+			Opacity = AppSettings.Current.CompactOpacity;
 		}
 	}
-
-	}
+}

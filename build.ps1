@@ -5,6 +5,8 @@ param (
     [ValidateSet("win-x64", "win-x86")]
     [string]$Architecture = "win-x64",
 
+    [string]$DeployPath = $null,
+
     [switch]$SelfContained,
     [switch]$Clean,
     [switch]$Run
@@ -109,15 +111,22 @@ if (Test-Path $exePath) {
     Write-Host "========================================"
     Write-Host ""
 
-    # Sincronizacion automatica con la carpeta de produccion si existe
-    $prodDir = "H:\Programas Instalados W10\X-Charge"
-    if (Test-Path $prodDir) {
-        $prodExe = Join-Path $prodDir "X-Charge.exe"
+    # 6. Empaquetado ZIP automatico
+    $zipName = if ($SelfContained) { "X-Charge-v1.0-Standalone-$Architecture.zip" } else { "X-Charge-v1.0-FrameworkDependent-$Architecture.zip" }
+    $zipPath = Join-Path $publishDir $zipName
+    Write-Host "[*] Empaquetando distribucion comprimida ($zipName)..." -ForegroundColor Cyan
+    Compress-Archive -Path $exePath -DestinationPath $zipPath -Force
+    Write-Host "[OK] Paquete ZIP generado: $zipPath" -ForegroundColor Green
+    Write-Host ""
+
+    # Sincronizacion opcional con carpeta de despliegue si se especifica (-DeployPath)
+    if ($DeployPath -and (Test-Path $DeployPath)) {
+        $destExe = Join-Path $DeployPath "X-Charge.exe"
         try {
-            Copy-Item -Path $exePath -Destination $prodExe -Force
-            Write-Host "[OK] Actualizado exitosamente en produccion: $prodExe" -ForegroundColor Green
+            Copy-Item -Path $exePath -Destination $destExe -Force
+            Write-Host "[OK] Desplegado exitosamente en: $destExe" -ForegroundColor Green
         } catch {
-            Write-Warning "No se pudo actualizar en produccion (puede estar en ejecucion): $($_.Exception.Message)"
+            Write-Warning "No se pudo copiar en la ruta de despliegue: $($_.Exception.Message)"
         }
     }
 } else {
