@@ -16,7 +16,6 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Hardcodet.Wpf.TaskbarNotification;
-using Microsoft.Toolkit.Uwp.Notifications;
 using Microsoft.Win32;
 using XboxBatteryMonitor.Services;
 
@@ -36,14 +35,10 @@ public partial class MainWindow : Window
 	private double _anchorTop = double.NaN;
 	private double _orbitAngle;
 
-	[DllImport("user32.dll")]
-	private static extern short GetAsyncKeyState(int vKey);
-
-	private const int VK_SHIFT = 0x10;
-	private const int VK_CONTROL = 0x11;
-
-	private DispatcherTimer? _ghostBypassTimer;
-	private bool _isGhostTemporarilyBypassed;
+	private double _lastTrayPercent = -999.0;
+	private bool _lastTrayIsOnExternalPower;
+	private bool _lastTrayIsConnected;
+	private int _lastTrayThreshold = -1;
 
 	private DispatcherTimer? _flashTimer;
 	private DispatcherTimer? _opacityMeterTimer;
@@ -108,7 +103,7 @@ public partial class MainWindow : Window
 
 		_burnInTimer = new DispatcherTimer
 		{
-			Interval = TimeSpan.FromSeconds(20.0)
+			Interval = TimeSpan.FromSeconds(120.0)
 		};
 		_burnInTimer.Tick += BurnInTimer_Tick;
 		_burnInTimer.Start();
@@ -329,6 +324,7 @@ public partial class MainWindow : Window
 
 		// 6. Opciones avanzadas
 		GhostModeItem.IsChecked = AppSettings.Current.ClickThroughEnabled;
+		AntiBurnInItem.IsChecked = AppSettings.Current.AntiBurnInEnabled;
 		HotKeyItem.IsChecked = AppSettings.Current.HotKeyEnabled;
 		StartupItem.IsChecked = StartupService.IsStartupEnabled();
 		StartInTrayItem.IsChecked = AppSettings.Current.StartInTray;
@@ -457,79 +453,44 @@ public partial class MainWindow : Window
 		ExitApp();
 	}
 
-	private void EnsureGhostBypassTimer()
+	private void AntiBurnInItem_Click(object sender, RoutedEventArgs e)
 	{
-		if (_ghostBypassTimer == null)
+		AppSettings.Current.AntiBurnInEnabled = AntiBurnInItem.IsChecked;
+		AppSettings.Current.Save();
+		if (!AppSettings.Current.AntiBurnInEnabled)
 		{
-			_ghostBypassTimer = new DispatcherTimer
+			BeginAnimation(LeftProperty, null);
+			BeginAnimation(TopProperty, null);
+			if (TextShiftTransform != null)
 			{
-				Interval = TimeSpan.FromMilliseconds(50.0)
-			};
-			_ghostBypassTimer.Tick += GhostBypassTimer_Tick;
-		}
-		if (!_ghostBypassTimer.IsEnabled)
-		{
-			_ghostBypassTimer.Start();
-		}
-	}
-
-	private void GhostBypassTimer_Tick(object? sender, EventArgs e)
-	{
-		if (!AppSettings.Current.ClickThroughEnabled || CompactModeBorder.Visibility != Visibility.Visible || !IsVisible)
-		{
-			_ghostBypassTimer?.Stop();
-			if (_isGhostTemporarilyBypassed)
-			{
-				_isGhostTemporarilyBypassed = false;
-				ApplyClickThrough();
+				TextShiftTransform.BeginAnimation(TranslateTransform.XProperty, null);
+				TextShiftTransform.BeginAnimation(TranslateTransform.YProperty, null);
+				TextShiftTransform.X = 0;
+				TextShiftTransform.Y = 0;
 			}
-			return;
-		}
-
-		// Detectar si Shift o Ctrl están sostenidos para anular temporalmente el click-through
-		bool isPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0 || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-		if (isPressed != _isGhostTemporarilyBypassed)
-		{
-			_isGhostTemporarilyBypassed = isPressed;
-			ApplyClickThrough();
 		}
 	}
 
 	private void ApplyClickThrough()
 	{
 		bool isGhostActive = AppSettings.Current.ClickThroughEnabled && (CompactModeBorder.Visibility == Visibility.Visible);
-		bool shouldBeClickThrough = isGhostActive && !_isGhostTemporarilyBypassed;
-		WindowStyleService.SetClickThrough(this, shouldBeClickThrough);
+		WindowStyleService.SetClickThrough(this, isGhostActive);
 
-		if (isGhostActive)
+		if (GhostIndicator != null)
 		{
-			EnsureGhostBypassTimer();
-			GhostIndicator.Visibility = Visibility.Visible;
-
-			if (_isGhostTemporarilyBypassed)
+			GhostIndicator.Visibility = isGhostActive ? Visibility.Visible : Visibility.Collapsed;
+			if (isGhostActive)
 			{
-				// Modo temporal desbloqueado: Shift o Ctrl presionado
-				GhostIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(255, 52, 211, 153)); // Verde brillante
-				GhostIndicator.ToolTip = Strings.Get("GhostUnlockedTip");
-				FullModeButton.Visibility = Visibility.Visible;
-				ResizeThumb.Visibility = Visibility.Visible;
-			}
-			else
-			{
-				// Modo fantasma activo: clics atraviesan hacia el juego
-				GhostIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(128, 56, 189, 248)); // Azul cielo translúcido
+				GhostIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(128, 56, 189, 248));
 				GhostIndicator.ToolTip = Strings.Get("GhostLockedTip");
 				FullModeButton.Visibility = Visibility.Collapsed;
 				ResizeThumb.Visibility = Visibility.Collapsed;
 			}
-		}
-		else
-		{
-			_ghostBypassTimer?.Stop();
-			_isGhostTemporarilyBypassed = false;
-			GhostIndicator.Visibility = Visibility.Collapsed;
-			FullModeButton.Visibility = Visibility.Visible;
-			ResizeThumb.Visibility = Visibility.Visible;
+			else
+			{
+				FullModeButton.Visibility = Visibility.Visible;
+				ResizeThumb.Visibility = Visibility.Visible;
+			}
 		}
 	}
 
@@ -628,6 +589,7 @@ public partial class MainWindow : Window
 		Poll3sItem.Header = Strings.Get("Poll3s");
 		Poll5sItem.Header = Strings.Get("Poll5s");
 		GhostModeItem.Header = Strings.Get("GhostMode");
+		AntiBurnInItem.Header = Strings.Get("AntiBurnIn");
 		HotKeyItem.Header = Strings.Get("GlobalHotKey");
 		StartupItem.Header = Strings.Get("StartWindows");
 		StartInTrayItem.Header = Strings.Get("StartInTray");
@@ -652,9 +614,24 @@ public partial class MainWindow : Window
 	{
 		if (TrayIcon == null) return;
 
-		Icon oldIcon = TrayIcon.Icon;
-		TrayIcon.Icon = TrayIconService.GenerateBatteryIcon(percent, isOnExternalPower, isConnected, AppSettings.Current.LowBatteryThreshold);
-		oldIcon?.Dispose();
+		int threshold = AppSettings.Current.LowBatteryThreshold;
+		bool stateChanged = Math.Abs(_lastTrayPercent - percent) > 0.1
+			|| _lastTrayIsOnExternalPower != isOnExternalPower
+			|| _lastTrayIsConnected != isConnected
+			|| _lastTrayThreshold != threshold
+			|| TrayIcon.Icon == null;
+
+		if (stateChanged)
+		{
+			Icon? oldIcon = TrayIcon.Icon;
+			TrayIcon.Icon = TrayIconService.GenerateBatteryIcon(percent, isOnExternalPower, isConnected, threshold);
+			oldIcon?.Dispose();
+
+			_lastTrayPercent = percent;
+			_lastTrayIsOnExternalPower = isOnExternalPower;
+			_lastTrayIsConnected = isConnected;
+			_lastTrayThreshold = threshold;
+		}
 
 		string text;
 		if (!isConnected)
@@ -677,7 +654,7 @@ public partial class MainWindow : Window
 		TrayIcon.ToolTipText = (text.Length > 63) ? text.Substring(0, 60) + "..." : text;
 	}
 
-	private void ShowWindow()
+	public void ShowWindow()
 	{
 		_isHiding = false;
 
@@ -725,7 +702,6 @@ public partial class MainWindow : Window
 
 		_isHiding = true;
 		_burnInTimer.Stop();
-		_ghostBypassTimer?.Stop();
 
 		DoubleAnimation animation = new(0.0, TimeSpan.FromSeconds(0.2));
 		animation.Completed += (s, e) =>
@@ -766,7 +742,6 @@ public partial class MainWindow : Window
 		SaveCurrentState();
 
 		_flashTimer?.Stop();
-		_ghostBypassTimer?.Stop();
 		_soundCts?.Cancel();
 		SoundService.StopAlert();
 		SoundService.Dispose();
@@ -826,6 +801,7 @@ public partial class MainWindow : Window
 
 		bool hasAnyLowBattery = false;
 		double lowestPercent = double.MaxValue;
+		int criticalSlot = -1;
 		string lowestText = "--%";
 		SolidColorBrush lowestBrush = defaultTextBrush;
 		string allSummaries = "";
@@ -879,9 +855,9 @@ public partial class MainWindow : Window
 					displayPercent = xLevel switch
 					{
 						XInputService.BATTERY_LEVEL_FULL => 100.0,
-						XInputService.BATTERY_LEVEL_MEDIUM => 70.0,
-						XInputService.BATTERY_LEVEL_LOW => 35.0,
-						_ => 15.0
+						XInputService.BATTERY_LEVEL_MEDIUM => 65.0,
+						XInputService.BATTERY_LEVEL_LOW => 25.0,
+						_ => 5.0
 					};
 					statusLabel = Strings.Get("NotCharged");
 					statusColor = (displayPercent <= AppSettings.Current.LowBatteryThreshold)
@@ -938,6 +914,7 @@ public partial class MainWindow : Window
 				lowestPercent = displayPercent;
 				lowestText = $"{Math.Round(displayPercent)}%";
 				lowestBrush = statusBrush;
+				criticalSlot = controllerInfo.XInputSlot;
 			}
 
 			anyExternalPower |= isOnExternalPower;
@@ -951,10 +928,10 @@ public partial class MainWindow : Window
 				{
 					try
 					{
-						new ToastContentBuilder()
-							.AddText(Strings.Get("LowBattery"))
-							.AddText(string.Format(Strings.Get("ControllerHas"), ctrlName, Math.Round(displayPercent)))
-							.Show();
+						TrayIcon?.ShowBalloonTip(
+							Strings.Get("LowBattery"),
+							string.Format(Strings.Get("ControllerHas"), ctrlName, Math.Round(displayPercent)),
+							BalloonIcon.Warning);
 					}
 					catch { }
 
@@ -979,6 +956,16 @@ public partial class MainWindow : Window
 
 		CompactPercentText.Text = lowestText;
 		CompactPercentText.Foreground = lowestBrush;
+
+		if (Controllers.Count > 1 && criticalSlot >= 0)
+		{
+			CompactSlotBadgeText.Text = $"P{criticalSlot + 1}";
+			CompactSlotBadge.Visibility = Visibility.Visible;
+		}
+		else
+		{
+			CompactSlotBadge.Visibility = Visibility.Collapsed;
+		}
 
 		if (allSummaries.EndsWith(" | "))
 		{
@@ -1125,6 +1112,8 @@ public partial class MainWindow : Window
 	{
 		FullModeBorder.Visibility = Visibility.Visible;
 		CompactModeBorder.Visibility = Visibility.Collapsed;
+		ClearValue(HeightProperty);
+		Height = double.NaN;
 		SizeToContent = SizeToContent.Height;
 		Width = 260.0;
 		BeginAnimation(OpacityProperty, null);
@@ -1167,6 +1156,9 @@ public partial class MainWindow : Window
 	{
 		if (CompactModeBorder.Visibility == Visibility.Visible)
 		{
+			BeginAnimation(LeftProperty, null);
+			BeginAnimation(TopProperty, null);
+
 			double delta = Math.Max(e.HorizontalChange, e.VerticalChange);
 			double val = Math.Max(60.0, Width + delta);
 			val = Math.Min(300.0, val);
@@ -1212,7 +1204,7 @@ public partial class MainWindow : Window
 
 	private void BurnInTimer_Tick(object? sender, EventArgs e)
 	{
-		if (CompactModeBorder.Visibility == Visibility.Visible && IsVisible && !_isHiding)
+		if (AppSettings.Current.AntiBurnInEnabled && CompactModeBorder.Visibility == Visibility.Visible && IsVisible && !_isHiding)
 		{
 			if (double.IsNaN(_anchorLeft) || double.IsNaN(_anchorTop))
 			{
@@ -1220,14 +1212,14 @@ public partial class MainWindow : Window
 				_anchorTop = Top;
 			}
 
-			// Órbita circular armónica (R = 8px)
+			// Órbita circular armónica sutil (R = 4px)
 			_orbitAngle += Math.PI / 4.0;
 			if (_orbitAngle >= Math.PI * 2.0)
 			{
 				_orbitAngle -= Math.PI * 2.0;
 			}
 
-			double radius = 8.0;
+			double radius = 4.0;
 			double offsetX = Math.Round(radius * Math.Cos(_orbitAngle), 2);
 			double offsetY = Math.Round(radius * Math.Sin(_orbitAngle), 2);
 
@@ -1236,11 +1228,11 @@ public partial class MainWindow : Window
 			double toLeft = Math.Clamp(_anchorLeft + offsetX, workArea.Left, Math.Max(workArea.Left, workArea.Right - Width));
 			double toTop = Math.Clamp(_anchorTop + offsetY, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - Height));
 
-			DoubleAnimation animLeft = new(toLeft, TimeSpan.FromSeconds(7.0))
+			DoubleAnimation animLeft = new(toLeft, TimeSpan.FromSeconds(3.0))
 			{
 				EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
 			};
-			DoubleAnimation animTop = new(toTop, TimeSpan.FromSeconds(7.0))
+			DoubleAnimation animTop = new(toTop, TimeSpan.FromSeconds(3.0))
 			{
 				EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
 			};

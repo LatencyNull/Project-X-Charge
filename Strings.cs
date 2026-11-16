@@ -27,8 +27,8 @@ public static class Strings
 			"es",
 			new Dictionary<string, string>
 			{
-				{ "GhostLockedTip", "Modo fantasma activo (mantén Shift o Ctrl para interactuar)" },
-				{ "GhostUnlockedTip", "Interacción temporal habilitada (suelta Shift/Ctrl para volver a modo fantasma)" },
+				{ "GhostLockedTip", "Modo fantasma activo (clics atraviesan al juego)" },
+				{ "GhostUnlockedTip", "Modo fantasma desactivado" },
 				{ "ThemeDark", "Oscuro" },
 				{ "ThemeLight", "Claro" },
 				{ "ThemeTransparent", "Transparente" },
@@ -67,6 +67,7 @@ public static class Strings
 				{ "AlreadyRunning", "X-Charge ya se encuentra en ejecución. Revisa la bandeja del sistema (al lado del reloj)." },
 				{ "Language", "Idioma" },
 				{ "GhostMode", "Modo fantasma (clics atraviesan)" },
+				{ "AntiBurnIn", "Protección anti-quemado (Pixel Shift)" },
 				{ "GlobalHotKey", "Atajo global (Ctrl+Shift+X)" },
 				{ "PollInterval", "Frecuencia de sondeo" },
 				{ "Poll1s", "1 segundo (Juegos)" },
@@ -80,8 +81,8 @@ public static class Strings
 			"en",
 			new Dictionary<string, string>
 			{
-				{ "GhostLockedTip", "Ghost mode active (hold Shift or Ctrl to interact)" },
-				{ "GhostUnlockedTip", "Temporary interaction enabled (release Shift/Ctrl to return to ghost mode)" },
+				{ "GhostLockedTip", "Ghost mode active (clicks pass through to game)" },
+				{ "GhostUnlockedTip", "Ghost mode disabled" },
 				{ "ThemeDark", "Dark" },
 				{ "ThemeLight", "Light" },
 				{ "ThemeTransparent", "Transparent" },
@@ -120,6 +121,7 @@ public static class Strings
 				{ "AlreadyRunning", "X-Charge is already running. Check the system tray (near the clock)." },
 				{ "Language", "Language" },
 				{ "GhostMode", "Ghost mode (click-through)" },
+				{ "AntiBurnIn", "Anti-burn-in protection (Pixel Shift)" },
 				{ "GlobalHotKey", "Global hotkey (Ctrl+Shift+X)" },
 				{ "PollInterval", "Polling rate" },
 				{ "Poll1s", "1 second (Gaming)" },
@@ -133,8 +135,8 @@ public static class Strings
 			"fr",
 			new Dictionary<string, string>
 			{
-				{ "GhostLockedTip", "Mode fantôme actif (maintenez Maj ou Ctrl pour interagir)" },
-				{ "GhostUnlockedTip", "Interaction temporaire activée (relâchez Maj/Ctrl pour revenir au mode fantôme)" },
+				{ "GhostLockedTip", "Mode fantôme actif (les clics passent au jeu)" },
+				{ "GhostUnlockedTip", "Mode fantôme désactivé" },
 				{ "ThemeDark", "Sombre" },
 				{ "ThemeLight", "Clair" },
 				{ "ThemeTransparent", "Transparent" },
@@ -173,6 +175,7 @@ public static class Strings
 				{ "AlreadyRunning", "X-Charge est déjà en cours d'exécution. Vérifiez la barre des tâches." },
 				{ "Language", "Langue" },
 				{ "GhostMode", "Mode fantôme (clics directs)" },
+				{ "AntiBurnIn", "Protection anti-marquage (Pixel Shift)" },
 				{ "GlobalHotKey", "Raccourci global (Ctrl+Shift+X)" },
 				{ "PollInterval", "Taux de rafraîchissement" },
 				{ "Poll1s", "1 seconde (Jeux)" },
@@ -186,8 +189,8 @@ public static class Strings
 			"de",
 			new Dictionary<string, string>
 			{
-				{ "GhostLockedTip", "Geistermodus aktiv (Shift oder Strg gedrückt halten)" },
-				{ "GhostUnlockedTip", "Interaktion aktiviert (Shift/Strg loslassen für Geistermodus)" },
+				{ "GhostLockedTip", "Geistermodus aktiv (Klicks gehen durch)" },
+				{ "GhostUnlockedTip", "Geistermodus deaktiviert" },
 				{ "ThemeDark", "Dunkel" },
 				{ "ThemeLight", "Hell" },
 				{ "ThemeTransparent", "Transparent" },
@@ -226,6 +229,7 @@ public static class Strings
 				{ "AlreadyRunning", "X-Charge wird bereits ausgeführt. Überprüfen Sie den Infobereich." },
 				{ "Language", "Sprache" },
 				{ "GhostMode", "Geistermodus (Klicks gehen durch)" },
+				{ "AntiBurnIn", "Einbrennschutz (Pixel Shift)" },
 				{ "GlobalHotKey", "Globaler Hotkey (Ctrl+Shift+X)" },
 				{ "PollInterval", "Abfragerate" },
 				{ "Poll1s", "1 Sekunde (Gaming)" },
@@ -239,8 +243,8 @@ public static class Strings
 			"pt",
 			new Dictionary<string, string>
 			{
-				{ "GhostLockedTip", "Modo fantasma ativo (segure Shift ou Ctrl para interagir)" },
-				{ "GhostUnlockedTip", "Interação temporária ativada (solte Shift/Ctrl para voltar ao modo fantasma)" },
+				{ "GhostLockedTip", "Modo fantasma ativo (cliques passam para o jogo)" },
+				{ "GhostUnlockedTip", "Modo fantasma desativado" },
 				{ "ThemeDark", "Escuro" },
 				{ "ThemeLight", "Claro" },
 				{ "ThemeTransparent", "Transparente" },
@@ -279,6 +283,7 @@ public static class Strings
 				{ "AlreadyRunning", "O X-Charge já está em execução. Verifique a bandeja do sistema." },
 				{ "Language", "Idioma" },
 				{ "GhostMode", "Modo fantasma (cliques passam direto)" },
+				{ "AntiBurnIn", "Proteção anti-burn-in (Pixel Shift)" },
 				{ "GlobalHotKey", "Atalho global (Ctrl+Shift+X)" },
 				{ "PollInterval", "Frequência de atualização" },
 				{ "Poll1s", "1 segundo (Jogos)" },
@@ -292,8 +297,8 @@ public static class Strings
 			"zh",
 			new Dictionary<string, string>
 			{
-				{ "GhostLockedTip", "幽灵穿透模式已激活（按住 Shift 或 Ctrl 即可交互）" },
-				{ "GhostUnlockedTip", "已启用临时交互（释放 Shift/Ctrl 恢复幽灵模式）" },
+				{ "GhostLockedTip", "幽灵穿透模式已激活（点击穿透到游戏）" },
+				{ "GhostUnlockedTip", "幽灵穿透模式已关闭" },
 				{ "ThemeDark", "深色" },
 				{ "ThemeLight", "浅色" },
 				{ "ThemeTransparent", "透明" },
@@ -332,6 +337,7 @@ public static class Strings
 				{ "AlreadyRunning", "X-Charge 已在运行。请检查系统托盘。" },
 				{ "Language", "语言" },
 				{ "GhostMode", "幽灵穿透模式（点击穿透到游戏）" },
+				{ "AntiBurnIn", "防烧屏像素位移 (Pixel Shift)" },
 				{ "GlobalHotKey", "全局热键 (Ctrl+Shift+X)" },
 				{ "PollInterval", "轮询频率" },
 				{ "Poll1s", "1 秒 (游戏响应)" },
@@ -345,8 +351,8 @@ public static class Strings
 			"ru",
 			new Dictionary<string, string>
 			{
-				{ "GhostLockedTip", "Режим призрака активен (зажмите Shift или Ctrl)" },
-				{ "GhostUnlockedTip", "Взаимодействие включено (отпустите Shift/Ctrl для возврата)" },
+				{ "GhostLockedTip", "Режим призрака активен (клики проходят сквозь)" },
+				{ "GhostUnlockedTip", "Режим призрака отключен" },
 				{ "ThemeDark", "Темная" },
 				{ "ThemeLight", "Светлая" },
 				{ "ThemeTransparent", "Прозрачная" },
@@ -385,6 +391,7 @@ public static class Strings
 				{ "AlreadyRunning", "X-Charge уже запущен. Проверьте системный трей." },
 				{ "Language", "Язык" },
 				{ "GhostMode", "Режим призрака (прозрачен для кликов)" },
+				{ "AntiBurnIn", "Защита от выгорания (Pixel Shift)" },
 				{ "GlobalHotKey", "Глобальная горячая клавиша (Ctrl+Shift+X)" },
 				{ "PollInterval", "Частота опроса" },
 				{ "Poll1s", "1 секунда (Игры)" },

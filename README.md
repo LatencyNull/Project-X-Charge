@@ -24,15 +24,15 @@
   - **Ghost Mode (Click-Through)**: Makes the compact floating HUD click-through (`WS_EX_TRANSPARENT`), allowing game clicks and cursor interactions to pass right through the widget without disruption.
   - **Global Hotkey (`Ctrl + Shift + X`)**: Toggle HUD visibility instantly from inside any full-screen game without alt-tabbing.
 - **OLED Anti-Burn-In Protection**:
-  - **Smooth Circular Orbit**: Imperceptible periodic harmonic displacement ($\Delta X = 8\cos\theta, \Delta Y = 8\sin\theta$) with gentle easing and micro text shifts every 20s to safeguard OLED/AMOLED screens.
+  - **Calibrated Circular Orbit**: Subtle harmonic displacement ($\Delta X = 4\cos\theta, \Delta Y = 4\sin\theta$) with gentle easing every 120s to safeguard OLED/AMOLED screens, with a dedicated toggle in the system tray menu for LCD users.
 - **System Tray Integration**:
-  - Dynamic pixel-art tray icon showing real-time battery fill and external power state (with leak-free Win32 GDI management).
+  - Dynamic pixel-art tray icon showing real-time battery fill and external power state (with state-cached, leak-free Win32 GDI management).
   - Tray Context Menu:
     - **Language Switcher**: Dynamic runtime selection across 7 languages (English, Spanish, French, German, Portuguese, Chinese, Russian).
     - **Theme Switcher**: Dark, Light, and Transparent themes.
     - **Audio Alerts**: Toggle USB connect/disconnect and low battery sounds.
     - **Customizable Thresholds**: 10%, 15%, or 20% low battery alarm levels.
-    - **Ghost Mode & Global Hotkey Toggles**.
+    - **Ghost Mode, Anti-Burn-In & Global Hotkey Toggles**.
 - **Data Resilience**:
   - Configuration saved in `%AppData%\X-Charge\config.json` with automated self-healing against corrupted JSON.
 
@@ -65,7 +65,7 @@ The application follows a clean, decoupled modular design:
 An automated PowerShell build script `build.ps1` is included:
 
 ```powershell
-# 1. Framework-Dependent Single-File build (~24 MB)
+# 1. Framework-Dependent Single-File build (~350 KB)
 .\build.ps1 -Clean
 
 # 2. Self-Contained standalone executable (~74 MB, no .NET runtime required)

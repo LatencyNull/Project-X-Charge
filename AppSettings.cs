@@ -46,6 +46,8 @@ public class AppSettings
 
 	public bool HotKeyEnabled { get; set; } = true;
 
+	public bool AntiBurnInEnabled { get; set; } = true;
+
 	public bool IsCompactMode { get; set; } = false;
 
 	public double CompactSize

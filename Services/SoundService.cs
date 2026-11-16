@@ -1,14 +1,13 @@
 using System;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Media;
 
 namespace XboxBatteryMonitor.Services;
 
 /// <summary>
-/// Gestiona la reproducción de sonidos del sistema para eventos de conexión USB y alarmas de batería baja.
+/// Gestiona la reproducción nativa y ligera de sonidos del sistema (winmm.dll)
+/// para eventos de conexión USB y alarmas de batería baja, sin dependencias COM.
 /// </summary>
 public static class SoundService
 {
@@ -20,8 +19,6 @@ public static class SoundService
 
     [DllImport("winmm.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern bool PlaySound(string pszSound, nint hmod, uint fdwSound);
-
-    private static MediaPlayer? _alertPlayer;
 
     public static void PlayConnectSound()
     {
@@ -49,37 +46,14 @@ public static class SoundService
 
         try
         {
-            string winMedia = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "Windows Notify System Generic.wav");
-            if (!File.Exists(winMedia))
+            for (int round = 0; round < 2; round++)
             {
-                winMedia = @"C:\Windows\Media\Windows Notify System Generic.wav";
-            }
+                if (cancellationToken.IsCancellationRequested || !AppSettings.Current.SoundBatteryEnabled)
+                    return;
 
-            if (!File.Exists(winMedia)) return;
+                PlaySound("SystemExclamation", IntPtr.Zero, SoundFlags);
 
-            _alertPlayer ??= new MediaPlayer();
-            _alertPlayer.Open(new Uri(winMedia, UriKind.Absolute));
-
-            for (int round = 0; round < 3; round++)
-            {
-                for (int i = 0; i < 3; i++)
-                {
-                    if (cancellationToken.IsCancellationRequested || !AppSettings.Current.SoundBatteryEnabled)
-                    {
-                        _alertPlayer.Stop();
-                        return;
-                    }
-
-                    _alertPlayer.Position = TimeSpan.Zero;
-                    _alertPlayer.Volume = 0.05 + (i * 0.1);
-                    _alertPlayer.Play();
-                    await Task.Delay(500, cancellationToken);
-                }
-
-                if (round < 2)
-                {
-                    await Task.Delay(2000, cancellationToken);
-                }
+                await Task.Delay(1500, cancellationToken);
             }
         }
         catch
@@ -92,18 +66,14 @@ public static class SoundService
     {
         try
         {
-            _alertPlayer?.Stop();
+            // SND_PURGE detiene cualquier sonido asíncrono en curso en winmm
+            PlaySound(string.Empty, IntPtr.Zero, 0x0040); // 0x0040 = SND_PURGE
         }
         catch { }
     }
 
     public static void Dispose()
     {
-        try
-        {
-            _alertPlayer?.Close();
-            _alertPlayer = null;
-        }
-        catch { }
+        StopAlert();
     }
 }

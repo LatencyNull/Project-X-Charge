@@ -119,6 +119,7 @@
             <MenuItem Name="Poll5sItem" Header="5 segundos (Ahorro)" IsCheckable="True" Tag="5" Click="PollIntervalItem_Click" />
           </MenuItem>
           <MenuItem Name="GhostModeItem" Header="Modo fantasma (clics atraviesan)" IsCheckable="True" Click="GhostModeItem_Click" />
+          <MenuItem Name="AntiBurnInItem" Header="Protección anti-quemado (Pixel Shift)" IsCheckable="True" Click="AntiBurnInItem_Click" />
           <MenuItem Name="HotKeyItem" Header="Atajo global (Ctrl+Shift+X)" IsCheckable="True" Click="HotKeyItem_Click" />
           <MenuItem Name="StartupItem" Header="Iniciar con Windows" IsCheckable="True" Click="StartupItem_Click" />
           <MenuItem Name="StartInTrayItem" Header="Iniciar en bandeja del sistema" IsCheckable="True" Click="StartInTrayItem_Click" />
@@ -214,10 +215,15 @@
             </StackPanel>
           </Border>
         </Grid>
-        <!-- Indicador visual cuando el Modo Fantasma está activo -->
-        <Path Name="GhostIndicator" Visibility="Collapsed" IsHitTestVisible="False"
-              Data="M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z"
-              Fill="#8038BDF8" Width="10" Height="10" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6" />
+        <!-- Indicadores superiores izquierdos: Modo Fantasma y Slot Badge -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6" IsHitTestVisible="False">
+          <Path Name="GhostIndicator" Visibility="Collapsed"
+                Data="M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z"
+                Fill="#8038BDF8" Width="10" Height="10" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center" />
+          <Border Name="CompactSlotBadge" CornerRadius="3" Background="#802563EB" Padding="3,1" Visibility="Collapsed" VerticalAlignment="Center">
+            <TextBlock Name="CompactSlotBadgeText" Text="P1" FontSize="9" FontWeight="Bold" Foreground="#FFFFFFFF" VerticalAlignment="Center" />
+          </Border>
+        </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4">
           <Button Name="FullModeButton" Content="◲" Width="16" Height="16" Background="#00FFFFFF" BorderThickness="0" Foreground="#AAAAAA" Cursor="Hand" ToolTip="Modo normal" FontSize="12" Click="ToggleMode_Click" />
         </StackPanel>

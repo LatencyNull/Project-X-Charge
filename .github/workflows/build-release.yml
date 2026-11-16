@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: dotnet restore X-Charge.csproj
 
-      - name: Publish Framework-Dependent (~24MB)
+      - name: Publish Framework-Dependent (~350KB)
         shell: pwsh
         run: |
           dotnet publish X-Charge.csproj -c Release -r win-x64 --nologo `
@@ -39,7 +39,7 @@ jobs:
             /p:IncludeNativeLibrariesForSelfExtract=true `
             -o publish/framework-dependent
 
-      - name: Publish Standalone Self-Contained (~75MB)
+      - name: Publish Standalone Self-Contained (~68MB)
         shell: pwsh
         run: |
           dotnet publish X-Charge.csproj -c Release -r win-x64 --nologo `

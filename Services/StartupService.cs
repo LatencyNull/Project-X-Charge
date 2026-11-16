@@ -18,38 +18,12 @@ public static class StartupService
     {
         try
         {
-            // 1. Intentar con permiso de escritura para auto-reparar la ruta si el ejecutable fue movido
-            using (RegistryKey? writeKey = Registry.CurrentUser.OpenSubKey(RunRegistryKey, writable: true))
+            using RegistryKey? readKey = Registry.CurrentUser.OpenSubKey(RunRegistryKey, writable: false);
+            if (readKey != null)
             {
-                if (writeKey != null)
-                {
-                    object? val = writeKey.GetValue(AppName) ?? writeKey.GetValue(LegacyAppName);
-                    if (val is string regPath)
-                    {
-                        string currentExe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "X-Charge.exe");
-                        string expectedVal = $"\"{currentExe}\"";
-
-                        if (!string.Equals(regPath.Trim(), expectedVal, StringComparison.OrdinalIgnoreCase))
-                        {
-                            writeKey.DeleteValue(LegacyAppName, throwOnMissingValue: false);
-                            writeKey.SetValue(AppName, expectedVal);
-                        }
-                        return true;
-                    }
-                    return false;
-                }
+                object? val = readKey.GetValue(AppName) ?? readKey.GetValue(LegacyAppName);
+                return val is string;
             }
-
-            // 2. Fallback de solo lectura si no se tienen permisos de escritura en HKCU\Run
-            using (RegistryKey? readKey = Registry.CurrentUser.OpenSubKey(RunRegistryKey, writable: false))
-            {
-                if (readKey != null)
-                {
-                    object? val = readKey.GetValue(AppName) ?? readKey.GetValue(LegacyAppName);
-                    return val is string;
-                }
-            }
-
             return false;
         }
         catch

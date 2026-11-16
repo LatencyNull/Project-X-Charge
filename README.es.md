@@ -24,15 +24,15 @@
   - **Modo Fantasma (Click-Through)**: Permite que los clics del ratón atraviesen el HUD flotante (`WS_EX_TRANSPARENT`), permitiéndote jugar y hacer clic en la pantalla del juego sin interferencias.
   - **Atajo global de teclado (`Ctrl + Shift + X`)**: Muestra u oculta el HUD al instante desde cualquier juego a pantalla completa sin salir al escritorio.
 - **Protección contra Quemado en Pantallas OLED (Anti-Burn-In)**:
-  - **Órbita Circular Armónica**: Desplazamiento periódico imperceptible ($\Delta X = 8\cos\theta, \Delta Y = 8\sin\theta$) y micro-desplazamientos de texto cada 20 segundos para proteger paneles OLED/AMOLED.
+  - **Órbita Circular Armónica Calibrada**: Desplazamiento periódico sutil ($\Delta X = 4\cos\theta, \Delta Y = 4\sin\theta$) cada 120 segundos para proteger paneles OLED/AMOLED, con interruptor en el menú de la bandeja para usuarios con monitores LCD.
 - **Integración con la Bandeja del Sistema (System Tray)**:
-  - Icono pixel-art dinámico que refleja el nivel exacto de carga en la barra de tareas (con liberación estricta de handles GDI).
+  - Icono pixel-art dinámico que refleja el nivel exacto de carga en la barra de tareas (con caché de estado y liberación estricta de handles GDI).
   - Menú contextual:
     - **Selector de Idioma Dinámico**: 7 idiomas con cambio en caliente sin reiniciar (Español, Inglés, Francés, Alemán, Portugués, Chino y Ruso).
     - **Selector de Temas**: Oscuro, Claro y Transparente.
     - **Alertas de Audio**: Notificaciones sonoras al conectar/desconectar USB y advertencia de batería baja.
     - **Umbrales Configurables**: Alarma al 10%, 15% o 20%.
-    - **Interruptores para Modo Fantasma y Atajo Global**.
+    - **Interruptores para Modo Fantasma, Anti-Burn-In y Atajo Global**.
 - **Resiliencia de Datos**:
   - Configuración guardada en `%AppData%\X-Charge\config.json` con autoreparación ante apagones repentinos o corrupción de JSON.
 
@@ -65,7 +65,7 @@ El proyecto está diseñado bajo una arquitectura modular desacoplada:
 Se incluye un script automatizado en PowerShell `build.ps1`:
 
 ```powershell
-# 1. Compilación Single-File dependiente del framework (~24 MB)
+# 1. Compilación Single-File dependiente del framework (~350 KB)
 .\build.ps1 -Clean
 
 # 2. Ejecutable autónomo independiente (~74 MB, no requiere tener .NET instalado)

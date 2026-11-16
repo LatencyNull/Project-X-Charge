@@ -9,18 +9,14 @@ namespace XboxBatteryMonitor
 {
     public partial class App : Application
     {
-        private const nint HWND_BROADCAST = 0xFFFF;
-
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern uint RegisterWindowMessage(string lpString);
-
-        [DllImport("user32.dll")]
-        private static extern bool PostMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
+        private const string EventName = "XChargeShowAppEvent_8a7d6f5e";
+        private const string MutexName = "XChargeAppMutex_8a7d6f5e";
 
         [DllImport("shell32.dll", SetLastError = true)]
         private static extern int SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
         private Mutex? _mutex;
+        private EventWaitHandle? _showAppEvent;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -36,15 +32,35 @@ namespace XboxBatteryMonitor
                 field.SetValue(null, false);
             }
 
-            _mutex = new Mutex(initiallyOwned: true, "XChargeAppMutex_8a7d6f5e", out var createdNew);
+            _mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
             if (!createdNew)
             {
-                // Notificar a la instancia existente que se muestre en pantalla y ganar foco
-                uint showMsg = RegisterWindowMessage("XCHARGE_SHOW_APP");
-                PostMessage(HWND_BROADCAST, showMsg, IntPtr.Zero, IntPtr.Zero);
+                try
+                {
+                    using EventWaitHandle showEvent = EventWaitHandle.OpenExisting(EventName);
+                    showEvent.Set();
+                }
+                catch { }
+
                 Application.Current.Shutdown();
                 return;
             }
+
+            try
+            {
+                _showAppEvent = new EventWaitHandle(false, EventResetMode.AutoReset, EventName);
+                ThreadPool.RegisterWaitForSingleObject(_showAppEvent, (state, timedOut) =>
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        if (MainWindow is MainWindow mw)
+                        {
+                            mw.ShowWindow();
+                        }
+                    });
+                }, null, -1, false);
+            }
+            catch { }
 
             base.OnStartup(e);
 
@@ -91,6 +107,7 @@ namespace XboxBatteryMonitor
             {
             }
             _mutex?.Dispose();
+            _showAppEvent?.Dispose();
             base.OnExit(e);
         }
     }
