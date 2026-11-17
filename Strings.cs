@@ -74,7 +74,9 @@ public static class Strings
 				{ "Poll2s", "2 segundos" },
 				{ "Poll3s", "3 segundos (Recomendado)" },
 				{ "Poll5s", "5 segundos (Ahorro)" },
-				{ "HotKeyConflict", "No se pudo registrar el atajo global (Ctrl+Shift+X). Ya está en uso por otra aplicación." }
+				{ "HotKeyConflict", "No se pudo registrar el atajo global (Ctrl+Shift+X). Ya está en uso por otra aplicación." },
+				{ "Settings", "Configuración" },
+				{ "SoundsAndAlerts", "Sonidos y Alertas" }
 			}
 		},
 		{
@@ -128,7 +130,9 @@ public static class Strings
 				{ "Poll2s", "2 seconds" },
 				{ "Poll3s", "3 seconds (Recommended)" },
 				{ "Poll5s", "5 seconds (Power saver)" },
-				{ "HotKeyConflict", "Could not register global hotkey (Ctrl+Shift+X). It is already in use by another application." }
+				{ "HotKeyConflict", "Could not register global hotkey (Ctrl+Shift+X). It is already in use by another application." },
+				{ "Settings", "Settings" },
+				{ "SoundsAndAlerts", "Sounds & Alerts" }
 			}
 		},
 		{
@@ -182,7 +186,9 @@ public static class Strings
 				{ "Poll2s", "2 secondes" },
 				{ "Poll3s", "3 secondes (Recommandé)" },
 				{ "Poll5s", "5 secondes (Économie)" },
-				{ "HotKeyConflict", "Impossible d'enregistrer le raccourci global (Ctrl+Shift+X). Déjà utilisé." }
+				{ "HotKeyConflict", "Impossible d'enregistrer le raccourci global (Ctrl+Shift+X). Déjà utilisé." },
+				{ "Settings", "Paramètres" },
+				{ "SoundsAndAlerts", "Sons et alertes" }
 			}
 		},
 		{
@@ -236,7 +242,9 @@ public static class Strings
 				{ "Poll2s", "2 Sekunden" },
 				{ "Poll3s", "3 Sekunden (Empfohlen)" },
 				{ "Poll5s", "5 Sekunden (Stromsparen)" },
-				{ "HotKeyConflict", "Globaler Hotkey (Ctrl+Shift+X) konnte nicht registriert werden. Bereits belegt." }
+				{ "HotKeyConflict", "Globaler Hotkey (Ctrl+Shift+X) konnte nicht registriert werden. Bereits belegt." },
+				{ "Settings", "Einstellungen" },
+				{ "SoundsAndAlerts", "Töne & Alarme" }
 			}
 		},
 		{
@@ -290,7 +298,9 @@ public static class Strings
 				{ "Poll2s", "2 segundos" },
 				{ "Poll3s", "3 segundos (Recomendado)" },
 				{ "Poll5s", "5 segundos (Economia)" },
-				{ "HotKeyConflict", "Não foi possível registrar o atalho global (Ctrl+Shift+X). Já em uso." }
+				{ "HotKeyConflict", "Não foi possível registrar o atalho global (Ctrl+Shift+X). Já em uso." },
+				{ "Settings", "Configurações" },
+				{ "SoundsAndAlerts", "Sons e Alertas" }
 			}
 		},
 		{
@@ -344,7 +354,9 @@ public static class Strings
 				{ "Poll2s", "2 秒" },
 				{ "Poll3s", "3 秒 (推荐)" },
 				{ "Poll5s", "5 秒 (省电)" },
-				{ "HotKeyConflict", "无法注册全局快捷键 (Ctrl+Shift+X)，已被其他程序占用。" }
+				{ "HotKeyConflict", "无法注册全局快捷键 (Ctrl+Shift+X)，已被其他程序占用。" },
+				{ "Settings", "设置" },
+				{ "SoundsAndAlerts", "声音与提醒" }
 			}
 		},
 		{
@@ -398,7 +410,9 @@ public static class Strings
 				{ "Poll2s", "2 секунды" },
 				{ "Poll3s", "3 секунды (Рекомендуется)" },
 				{ "Poll5s", "5 секунд (Экономия)" },
-				{ "HotKeyConflict", "Не удалось зарегистрировать глобальную горячую клавишу (Ctrl+Shift+X). Она уже занята." }
+				{ "HotKeyConflict", "Не удалось зарегистрировать глобальную горячую клавишу (Ctrl+Shift+X). Она уже занята." },
+				{ "Settings", "Настройки" },
+				{ "SoundsAndAlerts", "Звуки и оповещения" }
 			}
 		}
 	};

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -66,8 +67,15 @@ namespace XboxBatteryMonitor
 
             this.DispatcherUnhandledException += (s, args) =>
             {
-                MessageBox.Show(args.Exception.ToString(), "Error - X-Charge", MessageBoxButton.OK, MessageBoxImage.Hand);
+                try
+                {
+                    string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "X-Charge", "error.log");
+                    Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+                    File.AppendAllText(logPath, $"{DateTime.Now}: {args.Exception}{Environment.NewLine}");
+                }
+                catch { }
                 args.Handled = true;
+                Shutdown();
             };
 
             MainWindow mainWindow = new MainWindow();

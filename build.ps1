@@ -136,7 +136,8 @@ if (Test-Path $exePath) {
 
 # 6. Ejecucion opcional
 if ($Run) {
-    Write-Host "[*] Iniciando X-Charge..." -ForegroundColor Cyan
-    Start-Process -FilePath $exePath
+    $targetRun = if ($DeployPath -and (Test-Path (Join-Path $DeployPath "X-Charge.exe"))) { Join-Path $DeployPath "X-Charge.exe" } else { $exePath }
+    Write-Host "[*] Iniciando X-Charge desde $targetRun..." -ForegroundColor Cyan
+    Start-Process -FilePath $targetRun
     Write-Host "[OK] Proceso iniciado." -ForegroundColor Green
 }

@@ -30,7 +30,7 @@ public partial class MainWindow : Window
 	private CancellationTokenSource? _soundCts;
 	private bool _isExiting;
 	private bool _isHiding;
-	private double _compactSize = 80.0;
+	private double _compactSize = 70.0;
 	private double _anchorLeft = double.NaN;
 	private double _anchorTop = double.NaN;
 	private double _orbitAngle;
@@ -111,6 +111,17 @@ public partial class MainWindow : Window
 		// Respetar tema guardado en AppSettings.Current
 		SetTheme(AppSettings.Current.ThemeIndex);
 
+		if (ColorContextMenu != null)
+		{
+			ColorContextMenu.Closed += (s, e) =>
+			{
+				if (!IsMouseOver)
+				{
+					UpdateCompactControlsVisibility(false);
+				}
+			};
+		}
+
 		SourceInitialized += MainWindow_SourceInitialized;
 		UpdateBatteryStatus();
 	}
@@ -123,7 +134,7 @@ public partial class MainWindow : Window
 	private static extern bool ChangeWindowMessageFilter(uint message, uint dwFlag);
 	private const uint MSGFLT_ADD = 1;
 
-	[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+	[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
 	private static extern uint RegisterWindowMessage(string lpString);
 
 	private static readonly uint WmShowAppInstance = RegisterWindowMessage("XCHARGE_SHOW_APP");
@@ -173,7 +184,7 @@ public partial class MainWindow : Window
 		_isInitialized = true;
 
 		// 1. Restaurar tamaño personalizado si existe
-		if (AppSettings.Current.CompactSize >= 60.0 && AppSettings.Current.CompactSize <= 300.0)
+		if (AppSettings.Current.CompactSize >= 38.0 && AppSettings.Current.CompactSize <= 300.0)
 		{
 			_compactSize = AppSettings.Current.CompactSize;
 		}
@@ -183,8 +194,9 @@ public partial class MainWindow : Window
 		{
 			double left = AppSettings.Current.WindowLeft.Value;
 			double top = AppSettings.Current.WindowTop.Value;
-			double width = AppSettings.Current.IsCompactMode ? _compactSize : 260.0;
-			double height = AppSettings.Current.IsCompactMode ? _compactSize : 150.0;
+			double size = AppSettings.Current.IsCompactMode ? Math.Max(42.0, Math.Round(_compactSize)) : 260.0;
+			double width = AppSettings.Current.IsCompactMode ? size : 260.0;
+			double height = AppSettings.Current.IsCompactMode ? size : 150.0;
 
 			Rect virtualScreen = new(
 				SystemParameters.VirtualScreenLeft,
@@ -249,8 +261,8 @@ public partial class MainWindow : Window
 	public void ClampWindowToCurrentMonitor()
 	{
 		Rect workArea = WindowStyleService.GetCurrentMonitorWorkArea(this);
-		double curWidth = (CompactModeBorder.Visibility == Visibility.Visible) ? _compactSize : 260.0;
-		double curHeight = (CompactModeBorder.Visibility == Visibility.Visible) ? _compactSize : (ActualHeight > 50.0 ? ActualHeight : 150.0);
+		double curWidth = (CompactModeBorder.Visibility == Visibility.Visible) ? Width : 260.0;
+		double curHeight = (CompactModeBorder.Visibility == Visibility.Visible) ? Height : (ActualHeight > 50.0 ? ActualHeight : 150.0);
 
 		double clampedLeft = Math.Clamp(Left, workArea.Left, Math.Max(workArea.Left, workArea.Right - curWidth));
 		double clampedTestTop = Math.Clamp(Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - curHeight));
@@ -324,7 +336,6 @@ public partial class MainWindow : Window
 
 		// 6. Opciones avanzadas
 		GhostModeItem.IsChecked = AppSettings.Current.ClickThroughEnabled;
-		AntiBurnInItem.IsChecked = AppSettings.Current.AntiBurnInEnabled;
 		HotKeyItem.IsChecked = AppSettings.Current.HotKeyEnabled;
 		StartupItem.IsChecked = StartupService.IsStartupEnabled();
 		StartInTrayItem.IsChecked = AppSettings.Current.StartInTray;
@@ -453,24 +464,6 @@ public partial class MainWindow : Window
 		ExitApp();
 	}
 
-	private void AntiBurnInItem_Click(object sender, RoutedEventArgs e)
-	{
-		AppSettings.Current.AntiBurnInEnabled = AntiBurnInItem.IsChecked;
-		AppSettings.Current.Save();
-		if (!AppSettings.Current.AntiBurnInEnabled)
-		{
-			BeginAnimation(LeftProperty, null);
-			BeginAnimation(TopProperty, null);
-			if (TextShiftTransform != null)
-			{
-				TextShiftTransform.BeginAnimation(TranslateTransform.XProperty, null);
-				TextShiftTransform.BeginAnimation(TranslateTransform.YProperty, null);
-				TextShiftTransform.X = 0;
-				TextShiftTransform.Y = 0;
-			}
-		}
-	}
-
 	private void ApplyClickThrough()
 	{
 		bool isGhostActive = AppSettings.Current.ClickThroughEnabled && (CompactModeBorder.Visibility == Visibility.Visible);
@@ -483,15 +476,33 @@ public partial class MainWindow : Window
 			{
 				GhostIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(128, 56, 189, 248));
 				GhostIndicator.ToolTip = Strings.Get("GhostLockedTip");
-				FullModeButton.Visibility = Visibility.Collapsed;
-				ResizeThumb.Visibility = Visibility.Collapsed;
-			}
-			else
-			{
-				FullModeButton.Visibility = Visibility.Visible;
-				ResizeThumb.Visibility = Visibility.Visible;
 			}
 		}
+
+		UpdateCompactControlsVisibility(IsMouseOver);
+	}
+
+	private void UpdateCompactControlsVisibility(bool isHovered)
+	{
+		if (CompactModeBorder == null || CompactModeBorder.Visibility != Visibility.Visible) return;
+
+		if (AppSettings.Current.ClickThroughEnabled)
+		{
+			if (ColorPickerButton != null) ColorPickerButton.Visibility = Visibility.Collapsed;
+			if (FullModeButton != null) FullModeButton.Visibility = Visibility.Collapsed;
+			if (ResizeThumb != null) ResizeThumb.Visibility = Visibility.Collapsed;
+			return;
+		}
+
+		if (!isHovered && ColorContextMenu != null && ColorContextMenu.IsOpen)
+		{
+			return;
+		}
+
+		Visibility vis = isHovered ? Visibility.Visible : Visibility.Collapsed;
+		if (ColorPickerButton != null) ColorPickerButton.Visibility = vis;
+		if (FullModeButton != null) FullModeButton.Visibility = vis;
+		if (ResizeThumb != null) ResizeThumb.Visibility = vis;
 	}
 
 	private void SetTheme(int index)
@@ -579,7 +590,8 @@ public partial class MainWindow : Window
 		LightThemeItem.Header = Strings.Get("ThemeLight");
 		TransparentThemeItem.Header = Strings.Get("ThemeTransparent");
 		LanguagesMenuItem.Header = Strings.Get("Language");
-		SoundsMenuItem.Header = Strings.Get("PlaySounds");
+		SoundsMenuItem.Header = Strings.Get("SoundsAndAlerts");
+		SettingsMenuItem.Header = Strings.Get("Settings");
 		UsbSoundItem.Header = Strings.Get("SoundUsb");
 		BatterySoundItem.Header = Strings.Get("SoundBattery");
 		ThresholdMenuItem.Header = Strings.Get("BatteryOptions");
@@ -589,14 +601,105 @@ public partial class MainWindow : Window
 		Poll3sItem.Header = Strings.Get("Poll3s");
 		Poll5sItem.Header = Strings.Get("Poll5s");
 		GhostModeItem.Header = Strings.Get("GhostMode");
-		AntiBurnInItem.Header = Strings.Get("AntiBurnIn");
 		HotKeyItem.Header = Strings.Get("GlobalHotKey");
 		StartupItem.Header = Strings.Get("StartWindows");
 		StartInTrayItem.Header = Strings.Get("StartInTray");
 		HideUntilLowItem.Header = Strings.Get("HideUntilLow");
 		ExitItem.Header = Strings.Get("Exit");
 
+		InitializeColorPicker();
+		ApplyCompactColor();
 		UpdateControllerNames();
+	}
+
+	private void InitializeColorPicker()
+	{
+		var colors = new (string Name, string Hex)[]
+		{
+			("Blanco", "#FFFFFF"),
+			("Verde Xbox", "#107C10"),
+			("Verde Neón", "#00FF66"),
+			("Cian Neón", "#00E5FF"),
+			("Azul Eléctrico", "#3B82F6"),
+			("Amarillo", "#FACC15"),
+			("Naranja", "#FB923C"),
+			("Magenta", "#EC4899"),
+			("Rojo Alerta", "#EF4444")
+		};
+
+		ColorContextMenu.Items.Clear();
+		foreach (var (name, hex) in colors)
+		{
+			var brush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+			brush.Freeze();
+
+			var swatch = new Border
+			{
+				Width = 12,
+				Height = 12,
+				CornerRadius = new CornerRadius(6),
+				Background = brush,
+				Margin = new Thickness(0, 0, 8, 0),
+				VerticalAlignment = VerticalAlignment.Center,
+				BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(80, 255, 255, 255)),
+				BorderThickness = new Thickness(1)
+			};
+
+			var stack = new StackPanel { Orientation = Orientation.Horizontal };
+			stack.Children.Add(swatch);
+			stack.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center });
+
+			var item = new MenuItem
+			{
+				Header = stack,
+				Tag = hex,
+				IsCheckable = true,
+				IsChecked = string.Equals(AppSettings.Current.CompactTextColor, hex, StringComparison.OrdinalIgnoreCase)
+			};
+			item.Click += ColorMenuItem_Click;
+			ColorContextMenu.Items.Add(item);
+		}
+	}
+
+	private void UpdateColorPickerChecks()
+	{
+		foreach (var item in ColorContextMenu.Items.OfType<MenuItem>())
+		{
+			if (item.Tag is string hex)
+			{
+				item.IsChecked = string.Equals(AppSettings.Current.CompactTextColor, hex, StringComparison.OrdinalIgnoreCase);
+			}
+		}
+	}
+
+	private void ApplyCompactColor()
+	{
+		try
+		{
+			CompactPercentText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(AppSettings.Current.CompactTextColor));
+		}
+		catch { CompactPercentText.Foreground = System.Windows.Media.Brushes.White; }
+	}
+
+	private void ColorPickerButton_Click(object sender, RoutedEventArgs e)
+	{
+		if (ColorContextMenu != null)
+		{
+			UpdateColorPickerChecks();
+			ColorContextMenu.PlacementTarget = ColorPickerButton;
+			ColorContextMenu.IsOpen = true;
+		}
+	}
+
+	private void ColorMenuItem_Click(object sender, RoutedEventArgs e)
+	{
+		if (sender is MenuItem item && item.Tag is string color)
+		{
+			AppSettings.Current.CompactTextColor = color;
+			AppSettings.Current.Save();
+			ApplyCompactColor();
+			UpdateColorPickerChecks();
+		}
 	}
 
 	private void UpdateControllerNames()
@@ -955,7 +1058,16 @@ public partial class MainWindow : Window
 			: $"{Strings.Get("Controllers")} ({Controllers.Count})";
 
 		CompactPercentText.Text = lowestText;
-		CompactPercentText.Foreground = lowestBrush;
+		
+		// Si el nivel no es crítico, aplicar el color personalizado del usuario
+		if (lowestBrush.Color.R == 29 && lowestBrush.Color.G == 158 && lowestBrush.Color.B == 117)
+		{
+			ApplyCompactColor();
+		}
+		else
+		{
+			CompactPercentText.Foreground = lowestBrush;
+		}
 
 		if (Controllers.Count > 1 && criticalSlot >= 0)
 		{
@@ -1088,9 +1200,11 @@ public partial class MainWindow : Window
 		FullModeBorder.Visibility = Visibility.Collapsed;
 		CompactModeBorder.Visibility = Visibility.Visible;
 		SizeToContent = SizeToContent.Manual;
-		Width = _compactSize;
-		Height = _compactSize;
-		CompactPercentText.FontSize = _compactSize * 0.3;
+		double size = Math.Max(42.0, Math.Round(_compactSize));
+		Width = size;
+		Height = size;
+		CompactModeBorder.CornerRadius = new CornerRadius(size / 2.0);
+		CompactPercentText.FontSize = Math.Max(11.0, Math.Round(size * 0.32, 1));
 		_anchorLeft = Left;
 		_anchorTop = Top;
 		_orbitAngle = 0.0;
@@ -1159,13 +1273,14 @@ public partial class MainWindow : Window
 			BeginAnimation(LeftProperty, null);
 			BeginAnimation(TopProperty, null);
 
-			double delta = Math.Max(e.HorizontalChange, e.VerticalChange);
-			double val = Math.Max(60.0, Width + delta);
-			val = Math.Min(300.0, val);
+			double delta = Math.Abs(e.HorizontalChange) > Math.Abs(e.VerticalChange) ? e.HorizontalChange : e.VerticalChange;
+			double val = Math.Clamp(_compactSize + delta, 40.0, 180.0);
 			_compactSize = val;
-			Width = val;
-			Height = val;
-			CompactPercentText.FontSize = val * 0.3;
+			double size = Math.Max(42.0, Math.Round(_compactSize));
+			Width = size;
+			Height = size;
+			CompactModeBorder.CornerRadius = new CornerRadius(size / 2.0);
+			CompactPercentText.FontSize = Math.Max(11.0, Math.Round(size * 0.32, 1));
 
 			ClampWindowToCurrentMonitor();
 
@@ -1204,7 +1319,7 @@ public partial class MainWindow : Window
 
 	private void BurnInTimer_Tick(object? sender, EventArgs e)
 	{
-		if (AppSettings.Current.AntiBurnInEnabled && CompactModeBorder.Visibility == Visibility.Visible && IsVisible && !_isHiding)
+		if (CompactModeBorder.Visibility == Visibility.Visible && IsVisible && !_isHiding)
 		{
 			if (double.IsNaN(_anchorLeft) || double.IsNaN(_anchorTop))
 			{
@@ -1300,6 +1415,8 @@ public partial class MainWindow : Window
 	{
 		if (CompactModeBorder.Visibility == Visibility.Visible)
 		{
+			UpdateCompactControlsVisibility(true);
+
 			// Si la alarma de batería baja está activa, asegurar que permanezca en opacidad sólida 1.0
 			if (Controllers.Any(c => c.Percent >= 0.0 && c.Percent <= AppSettings.Current.LowBatteryThreshold && !c.IsCharging))
 			{
@@ -1312,6 +1429,8 @@ public partial class MainWindow : Window
 	private void Window_MouseLeave(object sender, MouseEventArgs e)
 	{
 		if (CompactModeBorder.Visibility != Visibility.Visible) return;
+
+		UpdateCompactControlsVisibility(false);
 
 		if (Controllers.Any(c => c.Percent >= 0.0 && c.Percent <= AppSettings.Current.LowBatteryThreshold && !c.IsCharging))
 		{

@@ -3,5 +3,83 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <ResourceDictionary>
+            <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="{x:Type Separator}">
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Margin" Value="4,4,4,4" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Separator}">
+                            <Border BorderBrush="#383838" BorderThickness="0,1,0,0" SnapsToDevicePixels="True" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style TargetType="{x:Type ContextMenu}">
+                <Setter Property="Background" Value="#252525" />
+                <Setter Property="Foreground" Value="#E0E0E0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ContextMenu}">
+                            <Border Background="{TemplateBinding Control.Background}" BorderBrush="#383838" BorderThickness="1" CornerRadius="8" Margin="0,0,8,8">
+                                <UIElement.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="3" Opacity="0.5" />
+                                </UIElement.Effect>
+                                <ItemsPresenter Margin="0,4" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style TargetType="{x:Type MenuItem}">
+                <Setter Property="Background" Value="#00FFFFFF" />
+                <Setter Property="Foreground" Value="#E0E0E0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type MenuItem}">
+                            <Border Name="Bd" Padding="12,6,12,6" Background="{TemplateBinding Control.Background}" CornerRadius="5" Margin="4,1,4,1" SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24" SharedSizeGroup="Checkmark" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="Shortcut" />
+                                        <ColumnDefinition Width="16" />
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter ContentSource="Icon" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    <TextBlock Name="CheckGlyph" Text="✓" Visibility="Collapsed" Foreground="#38BDF8" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="14" FontWeight="Bold" />
+                                    <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True" Margin="4,0,16,0" />
+                                    <Path Name="Arrow" Grid.Column="3" Data="M0,0 L4,4 L0,8" Fill="#A0A0A0" VerticalAlignment="Center" HorizontalAlignment="Right" Visibility="Collapsed" />
+                                    <Popup Name="PART_Popup" AllowsTransparency="True" Placement="Right" Focusable="False" PopupAnimation="Fade" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                                        <Border Background="#252525" BorderBrush="#383838" BorderThickness="1" CornerRadius="8" Margin="0,0,8,8">
+                                            <UIElement.Effect>
+                                                <DropShadowEffect BlurRadius="8" ShadowDepth="3" Opacity="0.5" />
+                                            </UIElement.Effect>
+                                            <ItemsPresenter Margin="0,4" />
+                                        </Border>
+                                    </Popup>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="MenuItem.IsHighlighted" Value="True">
+                                    <Setter TargetName="Bd" Property="Border.Background" Value="#0078D7" />
+                                    <Setter Property="Foreground" Value="#FFFFFFFF" />
+                                    <Setter TargetName="CheckGlyph" Property="TextBlock.Foreground" Value="#FFFFFFFF" />
+                                    <Setter TargetName="Arrow" Property="Shape.Fill" Value="#FFFFFFFF" />
+                                </Trigger>
+                                <Trigger Property="MenuItem.IsChecked" Value="True">
+                                    <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                                <Trigger Property="ItemsControl.HasItems" Value="True">
+                                    <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="#666666" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

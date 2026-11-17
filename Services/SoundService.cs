@@ -17,7 +17,7 @@ public static class SoundService
     private const uint SND_APPLICATION = 0x00200000;
     private const uint SoundFlags = SND_ASYNC | SND_NODEFAULT | SND_ALIAS | SND_APPLICATION;
 
-    [DllImport("winmm.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    [DllImport("winmm.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool PlaySound(string pszSound, nint hmod, uint fdwSound);
 
     public static void PlayConnectSound()

@@ -48,12 +48,14 @@ public class AppSettings
 
 	public bool AntiBurnInEnabled { get; set; } = true;
 
+	public string CompactTextColor { get; set; } = "#FFFFFF";
+
 	public bool IsCompactMode { get; set; } = false;
 
 	public double CompactSize
 	{
 		get => _compactSize;
-		set => _compactSize = Math.Clamp(value, 60.0, 300.0);
+		set => _compactSize = Math.Clamp(value, 38.0, 300.0);
 	}
 
 	public double? WindowLeft { get; set; } = null;
@@ -173,19 +175,26 @@ public class AppSettings
 
 				File.WriteAllText(tempPath, json);
 
-				// Mantener copia de seguridad .bak antes de sobreescribir el archivo activo
+				// Reemplazo atómico: remplaza ConfigPath con tempPath y guarda el viejo en bakPath
 				if (File.Exists(ConfigPath))
 				{
-					try
-					{
-						File.Copy(ConfigPath, bakPath, overwrite: true);
-					}
-					catch { }
+					File.Replace(tempPath, ConfigPath, bakPath);
 				}
-
-				File.Move(tempPath, ConfigPath, overwrite: true);
+				else
+				{
+					File.Move(tempPath, ConfigPath);
+				}
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				// Loguear error de guardado para diagnóstico
+				try
+				{
+					string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "X-Charge", "error.log");
+					File.AppendAllText(logPath, $"{DateTime.Now}: Error guardando configuración: {ex}{Environment.NewLine}");
+				}
+				catch { }
+			}
 		}
 	}
 }
